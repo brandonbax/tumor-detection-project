@@ -1,0 +1,14 @@
+task2_dataset/
+Task2_Test_Set/
+
+Tutorials/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv/
+
+.ipynb_checkpoints/
+
+.DS_Store
