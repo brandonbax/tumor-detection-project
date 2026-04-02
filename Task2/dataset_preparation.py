@@ -2,46 +2,38 @@
 Task 2: Dataset Preparation
 
 Approach:
-1. Goes through image and geojson pairs in train, val and test splits.
-2. For each nucleus, it computer the centroid using GeoJSON coordinates and crops it into a 100x100px patch. Determine class using properties["classifciation]["name"]
-3. Saves the patches and labels as .npy files and classes in a json. (index: class_name)
+1. Goes through image and geojson pairs in train and val splits.
+2. For each nucleus, computes the centroid using GeoJSON coordinates and crops a 100x100px patch.
+3. Randomly samples exactly N_TRAIN_PER_CLASS / N_VAL_PER_CLASS patches per class.
+4. Builds a contrastive set from the remaining train patches (no overlap with train set).
+5. Saves patches and labels as .npy files and class mapping as JSON.
 
-- Why choosing a 100x100px patch?
-
-The Task 2 test set files are already in 100×100 uint8 patches (verified during data exploration)
-So we deicded to use the same size across train, validation and test splits.
+- Why 100x100px patch?
+  The Task 2 test set files are already 100×100 uint8 patches (verified during data exploration).
 """
 
-# Imports
 import json
+import random
 from pathlib import Path
 import numpy as np
 from PIL import Image
 
-# Paths
 DATASET_PATH = Path(__file__).parent.parent / "Dataset_Splits"
 OUTPUT_DIR = Path(__file__).parent / "task2_dataset"
 
-# Patch Size to extract nucleus, chose 100 as it matches the test set 
 PATCH_SIZE = 100
-
-# pixels on each side of the centroid
 HALF = PATCH_SIZE // 2
 
-# Discovered by scanning all GeoJSON files across every split during data exploration.
-# Tissue classes are excluded for task 2
-KNOWN_CLASSES = [
-    "nuclei_apoptosis",
-    "nuclei_endothelium",
-    "nuclei_epithelium",
+# As per CW spec: only these 3 classes are used for Task 2
+TARGET_CLASSES = [
     "nuclei_histiocyte",
     "nuclei_lymphocyte",
-    "nuclei_melanophage",
-    "nuclei_neutrophil",
-    "nuclei_plasma_cell",
-    "nuclei_stroma",
     "nuclei_tumor",
 ]
+
+# As per CW spec: 2500 train / 700 val patches per class
+N_TRAIN_PER_CLASS = 2500
+N_VAL_PER_CLASS   = 700
 
 def load_image_as_rgb(image_path):
     img = Image.open(image_path).convert("RGB")
@@ -90,79 +82,75 @@ def extract_patch(image, cx, cy, patch_size=PATCH_SIZE):
 def build_class_index(class_names):
     return {name: i for i, name in enumerate(class_names)}
 
-def process_split(split_dir, class_to_idx, split_name):
+
+def extract_all_patches(split_dir, class_to_idx):
+    """Extract all patches for target classes; returns dict {class_name: [patches]}."""
     image_dir  = split_dir / "image"
     nuclei_dir = split_dir / "nuclei"
 
-    # Collect all nuclei GeoJSON files in this split
-    geojson_files = sorted(nuclei_dir.glob("*.geojson"))
+    per_class = {name: [] for name in class_to_idx}
 
-    patches       = []
-    int_labels    = []
-    string_labels = []
-
-    for geojson_path in geojson_files:
-        # Derive the matching image filename.
-        # GeoJSON name: training_set_metastatic_roi_001_nuclei.geojson
-        # Image name  : training_set_metastatic_roi_001.tif
-        stem = geojson_path.stem                    # "...001_nuclei"
-        image_stem = stem.replace("_nuclei", "")    # "...001"
-        image_path = image_dir / (image_stem + ".tif")
+    for geojson_path in sorted(nuclei_dir.glob("*.geojson")):
+        stem       = geojson_path.stem
+        image_path = image_dir / (stem.replace("_nuclei", "") + ".tif")
 
         if not image_path.exists():
             print(f"  [WARNING] Image not found, skipping: {image_path.name}")
             continue
 
-        # Load the full tissue image
         image = load_image_as_rgb(image_path)
 
-        # Load nuclei annotations
         with open(geojson_path) as f:
-            geojson_data = json.load(f)
+            features = json.load(f).get("features", [])
 
-        features = geojson_data.get("features", [])
         for feature in features:
-            # Extract class label from GeoJSON properties
-            props = feature.get("properties", {})
-            classification = props.get("classification", {})
-            class_name = classification.get("name", None)
+            class_name = (feature.get("properties", {})
+                                 .get("classification", {})
+                                 .get("name", None))
 
-            if class_name is None:
-                # Skip unannotated nuclei
-                continue
-
-            # Only keep classes we know about; warn about unexpected ones
             if class_name not in class_to_idx:
-                print(f"  [WARNING] Unknown class '{class_name}', skipping.")
                 continue
 
-            # Compute centroid of the polygon ring.
-            # Handle Polygon and MultiPolygon geometry types.
             geom_type = feature["geometry"]["type"]
             if geom_type == "Polygon":
-                # coordinates[0] is the exterior ring; [1:] are holes.
                 ring_coords = feature["geometry"]["coordinates"][0]
             elif geom_type == "MultiPolygon":
-                # Use the first polygon's exterior ring.
                 ring_coords = feature["geometry"]["coordinates"][0][0]
             else:
-                # Skip unexpected geometry types (e.g. Point, LineString).
-                print(f"  [WARNING] Unsupported geometry type '{geom_type}', "
-                      f"skipping.")
                 continue
 
             cx, cy = polygon_centroid(ring_coords)
+            patch  = extract_patch(image, cx, cy, patch_size=PATCH_SIZE)
+            per_class[class_name].append(patch)
 
-            # Extract the 100×100 patch centred at (cx, cy)
-            patch = extract_patch(image, cx, cy, patch_size=PATCH_SIZE)
+    return per_class
 
-            patches.append(patch)
+
+def sample_patches(per_class, n_per_class, seed=42):
+    """Randomly sample n_per_class patches from each class. Returns (patches, int_labels, str_labels, remainder)."""
+    class_to_idx  = build_class_index(list(per_class.keys()))
+    patches, int_labels, str_labels = [], [], []
+    remainder = {}  # patches not used in this sample (for contrastive set)
+
+    rng = random.Random(seed)
+    for class_name, all_patches in per_class.items():
+        shuffled = all_patches[:]
+        rng.shuffle(shuffled)
+        chosen   = shuffled[:n_per_class]
+        leftover = shuffled[n_per_class:]
+
+        if len(chosen) < n_per_class:
+            print(f"  [WARNING] {class_name}: only {len(chosen)} patches "
+                  f"available, requested {n_per_class}")
+
+        for p in chosen:
+            patches.append(p)
             int_labels.append(class_to_idx[class_name])
-            string_labels.append(class_name)
+            str_labels.append(class_name)
 
-    print(f"  {split_name}: {len(patches)} patches extracted from "
-          f"{len(geojson_files)} GeoJSON files.")
-    return patches, int_labels, string_labels
+        remainder[class_name] = leftover
+
+    return patches, int_labels, str_labels, remainder
 
 
 def save_split(patches, int_labels, string_labels, split_name, output_dir):
@@ -201,40 +189,53 @@ def main():
     print("Nuclei Patch Dataset Preparation")
     print("=" * 60)
 
-    # Build a fixed class→integer mapping
-    class_to_idx = build_class_index(KNOWN_CLASSES)
+    class_to_idx = build_class_index(TARGET_CLASSES)
     print(f"\nClass mapping:")
     for name, idx in class_to_idx.items():
         print(f"  {idx}: {name}")
 
-    # Save the class mapping to JSON so other scripts can load it
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_DIR / "class_names.json", "w") as f:
-        # Store as {index_str: class_name} for easy JSON loading
         json.dump({str(v): k for k, v in class_to_idx.items()}, f, indent=2)
     print(f"Class names saved to: {OUTPUT_DIR / 'class_names.json'}")
 
-    # Process each split
-    splits = ["train", "validation", "test"]
-    for split in splits:
-        split_dir = DATASET_PATH / split
-        if not split_dir.exists():
-            print(f"\n[SKIP] Split directory not found: {split_dir}")
-            continue
+    # --- Train split ---
+    print(f"\nProcessing split: train")
+    train_per_class = extract_all_patches(DATASET_PATH / "train", class_to_idx)
+    for cls, ps in train_per_class.items():
+        print(f"  {cls}: {len(ps)} available")
 
-        print(f"Processing split: {split}")
-        patches, int_labels, string_labels = process_split(
-            split_dir, class_to_idx, split
-        )
+    train_patches, train_int, train_str, contrastive_pool = sample_patches(
+        train_per_class, N_TRAIN_PER_CLASS
+    )
+    print_class_distribution("train", train_str)
+    save_split(train_patches, train_int, train_str, "train", OUTPUT_DIR)
 
-        if len(patches) == 0:
-            print(f"  [WARNING] No patches extracted for split '{split}'.")
-            continue
+    # --- Contrastive set (remaining patches after train sample, no leakage) ---
+    contrast_patches, contrast_int, contrast_str = [], [], []
+    for class_name, leftover in contrastive_pool.items():
+        idx = class_to_idx[class_name]
+        for p in leftover:
+            contrast_patches.append(p)
+            contrast_int.append(idx)
+            contrast_str.append(class_name)
 
-        print_class_distribution(split, string_labels)
-        save_split(patches, int_labels, string_labels, split, OUTPUT_DIR)
+    print_class_distribution("contrastive", contrast_str)
+    save_split(contrast_patches, contrast_int, contrast_str, "contrastive", OUTPUT_DIR)
 
-    print("Dataset preparation complete.")
+    # --- Validation split ---
+    print(f"\nProcessing split: validation")
+    val_per_class = extract_all_patches(DATASET_PATH / "validation", class_to_idx)
+    for cls, ps in val_per_class.items():
+        print(f"  {cls}: {len(ps)} available")
+
+    val_patches, val_int, val_str, _ = sample_patches(
+        val_per_class, N_VAL_PER_CLASS
+    )
+    print_class_distribution("validation", val_str)
+    save_split(val_patches, val_int, val_str, "validation", OUTPUT_DIR)
+
+    print("\nDataset preparation complete.")
     print(f"Output directory: {OUTPUT_DIR}")
 
 
