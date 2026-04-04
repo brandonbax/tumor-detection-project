@@ -100,24 +100,26 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 - Loss: CrossEntropy, Adam lr=1e-3 (higher LR appropriate for single linear layer)
 - Early stopping patience=7 on val_acc
 
-### Results
+### Results (final run)
 | Metric | Value |
 |---|---|
-| Overall accuracy | **0.5981** |
-| vs baseline (0.7083) | **below baseline** |
-| vs Approach A (0.7548) | **worse by 15.7%** |
-| Early stopping at epoch | 17 |
+| Overall accuracy | **0.5995** |
+| vs baseline (0.7083) | **below baseline by 10.9%** |
+| vs Approach A (0.7548) | **worse by 15.5%** |
+| Early stopping at epoch | 30 |
 
 #### Per-class breakdown
 | Class | Precision | Recall | F1 |
 |---|---|---|---|
-| nuclei_histiocyte | 0.6566 | 0.3743 | 0.4768 |
-| nuclei_lymphocyte | 0.5793 | 0.6471 | 0.6113 |
-| nuclei_tumor | 0.5887 | 0.7729 | 0.6683 |
+| nuclei_histiocyte | 0.5954 | 0.4457 | 0.5098 |
+| nuclei_lymphocyte | 0.6006 | 0.6229 | 0.6115 |
+| nuclei_tumor | 0.6012 | 0.7300 | 0.6594 |
+| **Overall** | **0.5990** | **0.5995** | **0.5936** |
 
 ### Latent Space Evaluation
-- **Silhouette score: -0.0133** — essentially 0, indicating no class separation in encoder features
-- t-SNE plot: `checkpoints_b/tsne_simclr.png` (rerun needed after n_iter fix)
+- **Silhouette score: -0.0139** — essentially 0, confirming no class separation in encoder features
+- t-SNE plot saved: `checkpoints_b/tsne_simclr.png`
+- A silhouette score near 0 means classes are completely overlapping in the latent space — the SimCLR encoder learned instance-level similarity but no class-discriminative structure
 
 ---
 
@@ -182,12 +184,13 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 
 ## Comparison & Discussion (to complete)
 
-| | Approach A | Approach B |
-|---|---|---|
-| Trainable params (training) | ~11.2M | ~1.5K (head only) |
-| Val accuracy | 0.7548 | TBD |
-| Beats baseline (0.7083)? | ✓ | TBD |
-| Overfitting? | Yes (train 0.90 vs val 0.75) | Expected less — frozen encoder |
+| | Baseline | Approach A | Approach B |
+|---|---|---|---|
+| Trainable params | ~5M | ~11.2M | ~1.5K (head only) |
+| Val accuracy | 0.7083 | **0.7548** | 0.5995 |
+| Beats baseline? | — | ✓ (+4.7%) | ✗ (-10.9%) |
+| Train/val gap | — | ~15% (overfitting) | ~9% (underfitting) |
+| Silhouette score | — | N/A | -0.0139 (no separation) |
 
 ### Points to discuss in report
 - Pre-training hypothesis: contrastive learning on unlabelled data should learn class-discriminative features, reducing overfitting when labelled data is scarce — **this hypothesis was NOT supported by results**
