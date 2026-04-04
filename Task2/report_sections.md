@@ -184,6 +184,19 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 
 ## Comparison & Discussion (to complete)
 
+### Approach A — EfficientNet-B0 + Weight=3.0 (latest run, val set)
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| nuclei_histiocyte | 0.7171 | 0.7171 | 0.7171 | 700 |
+| nuclei_lymphocyte | 0.7375 | 0.7986 | 0.7668 | 700 |
+| nuclei_tumor | 0.8053 | 0.7386 | 0.7705 | 700 |
+| **Overall** | 0.7533 | **0.7514** | 0.7515 | 2100 |
+
+- Early stopping at epoch 24 (train_acc=0.91 vs val_acc=0.75 — overfitting still present)
+- Histiocyte significantly improved: recall 0.49 → **0.72** vs original ResNet-18 run
+
+---
+
 ### Validation Set Results
 | | Baseline | Approach A | Approach B |
 |---|---|---|---|
