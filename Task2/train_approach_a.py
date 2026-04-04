@@ -10,6 +10,7 @@ import json
 import numpy as np
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models, transforms
 from sklearn.metrics import classification_report, accuracy_score
@@ -136,21 +137,25 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=4, factor=0.5)
 
-    best_val_loss   = float("inf")
     best_val_acc    = 0.0
     epochs_no_impro = 0
+    history = {"train_loss": [], "val_loss": [], "train_acc": [], "val_acc": []}
 
     for epoch in range(1, EPOCHS + 1):
         train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer)
         val_loss,   val_acc, val_preds, val_labels = evaluate(model, val_loader, criterion)
         scheduler.step(val_loss)
 
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+        history["train_acc"].append(train_acc)
+        history["val_acc"].append(val_acc)
+
         print(f"Epoch {epoch:02d}/{EPOCHS}  "
               f"train_loss={train_loss:.4f}  train_acc={train_acc:.4f}  "
               f"val_loss={val_loss:.4f}  val_acc={val_acc:.4f}")
 
-        if val_loss < best_val_loss:
-            best_val_loss   = val_loss
+        if val_acc > best_val_acc:
             best_val_acc    = val_acc
             epochs_no_impro = 0
             torch.save(model.state_dict(), OUTPUT_DIR / "best_model.pth")
@@ -161,6 +166,21 @@ def main():
                 print(f"  -> Early stopping at epoch {epoch} "
                       f"(no improvement for {EARLY_STOP_PAT} epochs)")
                 break
+
+    # ── Training curves ────────────────────────────────────────────────────────
+    epochs_ran = range(1, len(history["train_loss"]) + 1)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    ax1.plot(epochs_ran, history["train_loss"], label="Train")
+    ax1.plot(epochs_ran, history["val_loss"],   label="Val")
+    ax1.set_title("Loss"); ax1.set_xlabel("Epoch"); ax1.legend()
+    ax2.plot(epochs_ran, history["train_acc"], label="Train")
+    ax2.plot(epochs_ran, history["val_acc"],   label="Val")
+    ax2.axhline(0.7083, color="r", linestyle="--", label="Baseline")
+    ax2.set_title("Accuracy"); ax2.set_xlabel("Epoch"); ax2.legend()
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "training_curves_a.png", dpi=150)
+    plt.close()
+    print(f"Training curves saved to {OUTPUT_DIR / 'training_curves_a.png'}")
 
     # ── Final evaluation with best checkpoint ──────────────────────────────────
     print("\n── Final Evaluation (best checkpoint) ──")

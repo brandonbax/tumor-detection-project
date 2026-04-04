@@ -17,6 +17,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models, transforms
 from pathlib import Path
@@ -142,10 +143,12 @@ def main():
 
     best_loss       = float("inf")
     epochs_no_impro = 0
+    loss_history    = []
 
     for epoch in range(1, EPOCHS + 1):
         loss = train_one_epoch(model, loader, optimizer)
         scheduler.step()
+        loss_history.append(loss)
         print(f"Epoch {epoch:03d}/{EPOCHS}  loss={loss:.4f}")
 
         if loss < best_loss:
@@ -159,6 +162,13 @@ def main():
             if epochs_no_impro >= EARLY_STOP_PAT:
                 print(f"  -> Early stopping at epoch {epoch}")
                 break
+
+    plt.figure(figsize=(7, 4))
+    plt.plot(range(1, len(loss_history) + 1), loss_history)
+    plt.title("SimCLR Pre-training Loss"); plt.xlabel("Epoch"); plt.ylabel("NT-Xent Loss")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "simclr_pretrain_loss.png", dpi=150)
+    plt.close()
 
     print(f"\nPre-training complete. Encoder saved to {OUTPUT_DIR / 'simclr_encoder.pth'}")
 
