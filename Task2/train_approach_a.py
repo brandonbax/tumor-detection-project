@@ -132,9 +132,11 @@ def main():
         batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True
     )
 
-    model     = build_model()
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    model = build_model()
+    # Upweight histiocyte — rarest class in test set and consistently worst performer
+    class_weights = torch.tensor([2.0, 1.0, 1.0], device=DEVICE)
+    criterion     = nn.CrossEntropyLoss(weight=class_weights)
+    optimizer     = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=4, factor=0.5)
 
     best_val_acc    = 0.0

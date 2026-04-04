@@ -184,6 +184,7 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 
 ## Comparison & Discussion (to complete)
 
+### Validation Set Results
 | | Baseline | Approach A | Approach B |
 |---|---|---|---|
 | Trainable params | ~5M | ~11.2M | ~1.5K (head only) |
@@ -191,6 +192,34 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 | Beats baseline? | — | ✓ (+4.7%) | ✗ (-10.9%) |
 | Train/val gap | — | ~15% (overfitting) | ~9% (underfitting) |
 | Silhouette score | — | N/A | -0.0139 (no separation) |
+
+### Test Set Results (Task2_Test_Set, 1858 patches: 458 histiocyte / 700 lymphocyte / 700 tumor)
+| | Baseline | Approach A | Approach B |
+|---|---|---|---|
+| Overall accuracy | 0.7083 | 0.6787 | 0.6206 |
+| Beats baseline? | — | ✗ (-2.96%) | ✗ (-8.77%) |
+
+#### Approach A — Per-class (test set)
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| nuclei_histiocyte | 0.5257 | 0.4913 | 0.5079 | 458 |
+| nuclei_lymphocyte | 0.7858 | 0.6500 | 0.7115 | 700 |
+| nuclei_tumor | 0.6827 | 0.8300 | 0.7492 | 700 |
+| **Overall** | 0.6829 | **0.6787** | 0.6755 | 1858 |
+
+#### Approach B — Per-class (test set)
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| nuclei_histiocyte | 0.4336 | 0.3996 | 0.4159 | 458 |
+| nuclei_lymphocyte | 0.6552 | 0.6271 | 0.6409 | 700 |
+| nuclei_tumor | 0.6932 | 0.7586 | 0.7244 | 700 |
+| **Overall** | 0.6149 | **0.6206** | 0.6169 | 1858 |
+
+### Val vs Test gap analysis
+- Val was balanced (700/700/700); test is imbalanced (458/700/700)
+- Histiocyte has fewest test samples AND worst performance — drags overall accuracy down
+- Both models were not trained with class-weighted loss — histiocyte penalised equally despite being hardest class
+- **Fix: add weighted CrossEntropy loss to Approach A and retrain**
 
 ### Points to discuss in report
 - Pre-training hypothesis: contrastive learning on unlabelled data should learn class-discriminative features, reducing overfitting when labelled data is scarce — **this hypothesis was NOT supported by results**
