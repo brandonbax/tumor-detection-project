@@ -22,7 +22,8 @@ from pathlib import Path
 # ── Paths ──────────────────────────────────────────────────────────────────────
 TEST_DIR    = Path(__file__).parent.parent / "Task2_Test_Set"
 DATA_DIR    = Path(__file__).parent / "task2_dataset"
-CKPT_A      = Path(__file__).parent / "checkpoints_a" / "best_model.pth"
+CKPT_A      = Path(__file__).parent / "approach_a_improved" / "checkpoints_a_weighted" / "best_model.pth"
+CKPT_A_ORIG = Path(__file__).parent / "checkpoints_a" / "best_model.pth"
 CKPT_B      = Path(__file__).parent / "checkpoints_b" / "best_model_b.pth"
 ENCODER_B   = Path(__file__).parent / "checkpoints_b" / "simclr_encoder.pth"
 OUTPUT_DIR  = Path(__file__).parent / "test_results"
@@ -140,8 +141,10 @@ def main():
     loader  = DataLoader(dataset, batch_size=64, shuffle=False,
                          num_workers=2, pin_memory=False)
 
-    # ── Approach A ─────────────────────────────────────────────────────────────
-    print("\n── Approach A (ResNet-18 fine-tuned) ──")
+    # ── Approach A original ────────────────────────────────────────────────────
+    print("\n── Approach A original (ResNet-18, no class weights) ──")
+    global CKPT_A
+    CKPT_A        = CKPT_A_ORIG
     model_a       = load_model_a(len(TARGET_CLASSES), class_to_idx)
     preds_a, lbls = run_inference(model_a, loader)
     print(classification_report(lbls, preds_a, target_names=class_names, digits=4))
@@ -149,6 +152,19 @@ def main():
     plot_confusion_matrix(preds_a, lbls, class_names,
                           "Approach A — Confusion Matrix (Test Set)",
                           OUTPUT_DIR / "confusion_matrix_a.png")
+
+    # ── Approach A weighted ────────────────────────────────────────────────────
+    CKPT_A_W = Path(__file__).parent / "approach_a_improved" / "checkpoints_a_weighted" / "best_model.pth"
+    if CKPT_A_W.exists():
+        print("\n── Approach A Weighted (histiocyte weight=2.0) ──")
+        CKPT_A    = CKPT_A_W
+        model_aw  = load_model_a(len(TARGET_CLASSES), class_to_idx)
+        preds_aw, _ = run_inference(model_aw, loader)
+        print(classification_report(lbls, preds_aw, target_names=class_names, digits=4))
+        print(f"Overall accuracy: {accuracy_score(lbls, preds_aw):.4f}")
+        plot_confusion_matrix(preds_aw, lbls, class_names,
+                              "Approach A Weighted — Confusion Matrix (Test Set)",
+                              OUTPUT_DIR / "confusion_matrix_a_weighted.png")
 
     # ── Approach B ─────────────────────────────────────────────────────────────
     print("\n── Approach B (SimCLR + Linear Head) ──")
