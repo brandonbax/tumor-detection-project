@@ -25,6 +25,7 @@ from pathlib import Path
 DATA_DIR    = Path(__file__).parent / "task2_dataset"
 CKPT_DIR    = Path(__file__).parent / "checkpoints_b"
 OUTPUT_DIR  = Path(__file__).parent / "checkpoints_b"
+ENCODER_CKPT = CKPT_DIR / "supcon_encoder.pth"  # trained by pretrain_supcon.py
 
 # ── Hyperparameters ────────────────────────────────────────────────────────────
 BATCH_SIZE     = 64
@@ -93,7 +94,7 @@ class FrozenEncoderClassifier(nn.Module):
 def load_encoder():
     backbone = models.resnet18(weights=None)
     encoder  = nn.Sequential(*list(backbone.children())[:-1])
-    encoder.load_state_dict(torch.load(CKPT_DIR / "simclr_encoder.pth", map_location=DEVICE))
+    encoder.load_state_dict(torch.load(ENCODER_CKPT, map_location=DEVICE))
     for param in encoder.parameters():
         param.requires_grad = False   # freeze encoder
     return encoder.to(DEVICE)
