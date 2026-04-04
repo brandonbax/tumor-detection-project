@@ -149,7 +149,7 @@ def extract_features(encoder, loader):
 
 def plot_tsne(features, labels, class_names, save_path):
     print("Running t-SNE (this may take ~1 min)...")
-    tsne    = TSNE(n_components=2, perplexity=40, random_state=42, n_iter=1000)
+    tsne    = TSNE(n_components=2, perplexity=40, random_state=42, max_iter=1000)
     reduced = tsne.fit_transform(features)
 
     plt.figure(figsize=(8, 6))
