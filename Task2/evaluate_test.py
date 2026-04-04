@@ -153,18 +153,31 @@ def main():
                           "Approach A — Confusion Matrix (Test Set)",
                           OUTPUT_DIR / "confusion_matrix_a.png")
 
-    # ── Approach A weighted ────────────────────────────────────────────────────
+    # ── Approach A weighted 2x ─────────────────────────────────────────────────
     CKPT_A_W = Path(__file__).parent / "approach_a_improved" / "checkpoints_a_weighted" / "best_model.pth"
     if CKPT_A_W.exists():
         print("\n── Approach A Weighted (histiocyte weight=2.0) ──")
-        CKPT_A    = CKPT_A_W
-        model_aw  = load_model_a(len(TARGET_CLASSES), class_to_idx)
+        CKPT_A      = CKPT_A_W
+        model_aw    = load_model_a(len(TARGET_CLASSES), class_to_idx)
         preds_aw, _ = run_inference(model_aw, loader)
         print(classification_report(lbls, preds_aw, target_names=class_names, digits=4))
         print(f"Overall accuracy: {accuracy_score(lbls, preds_aw):.4f}")
         plot_confusion_matrix(preds_aw, lbls, class_names,
-                              "Approach A Weighted — Confusion Matrix (Test Set)",
-                              OUTPUT_DIR / "confusion_matrix_a_weighted.png")
+                              "Approach A Weighted 2x — Confusion Matrix (Test Set)",
+                              OUTPUT_DIR / "confusion_matrix_a_weighted2.png")
+
+    # ── Approach A weighted 3x ─────────────────────────────────────────────────
+    CKPT_A_W3 = Path(__file__).parent / "approach_a_improved" / "checkpoints_a_weighted3" / "best_model.pth"
+    if CKPT_A_W3.exists():
+        print("\n── Approach A Weighted (histiocyte weight=3.0) ──")
+        CKPT_A       = CKPT_A_W3
+        model_aw3    = load_model_a(len(TARGET_CLASSES), class_to_idx)
+        preds_aw3, _ = run_inference(model_aw3, loader)
+        print(classification_report(lbls, preds_aw3, target_names=class_names, digits=4))
+        print(f"Overall accuracy: {accuracy_score(lbls, preds_aw3):.4f}")
+        plot_confusion_matrix(preds_aw3, lbls, class_names,
+                              "Approach A Weighted 3x — Confusion Matrix (Test Set)",
+                              OUTPUT_DIR / "confusion_matrix_a_weighted3.png")
 
     # ── Approach B ─────────────────────────────────────────────────────────────
     print("\n── Approach B (SimCLR + Linear Head) ──")
