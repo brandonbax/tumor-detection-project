@@ -11,12 +11,12 @@ class_ids = {
     'tissue_stroma': 2,
 }
 
-def get_class_id(row):
+def get_class_id(row) -> int:
     class_name = row['classification'].get('name')
     # Other classes get the default id of 0
     return class_ids.get(class_name, 0)
 
-def create_mask(label_path, image_path, output_mask_path):
+def create_mask(label_path: str, image_path: str, output_mask_path: str) -> np.ndarray:
     geo_df = gpd.read_file(label_path)
     # Adds a new column with class id
     geo_df['class_id'] = geo_df.apply(get_class_id, axis=1)
@@ -41,3 +41,29 @@ def create_mask(label_path, image_path, output_mask_path):
             dst.write(mask, 1)
 
     return mask
+
+def match_image_label_pairs(label_path: str, image_path: str) -> List[Tuple[str, str]]:
+
+    image_ext = ".tif"
+    label_ext = ".geojson"
+ 
+    images = {}
+    for f in os.listdir(image_path):
+        if f.endswith(image_ext):
+            stem = os.path.splitext(f)[0]
+            images[stem] = os.path.join(image_path, f)
+ 
+    labels = {}
+    for f in os.listdir(label_path):
+        if f.endswith(label_ext):
+            stem = os.path.splitext(f)[0]
+            labels[stem] = os.path.join(label_path, f)
+ 
+    pairs = []
+    for stem in sorted(images.keys()):
+        if stem in labels:
+            pairs.append((images[stem], labels[stem]))
+        else:
+            print(f"No label found for image: {images[stem]}")
+
+    return pairs
