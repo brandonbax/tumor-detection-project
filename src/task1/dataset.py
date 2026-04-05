@@ -27,6 +27,16 @@ class TissueSegmentationDataset(Dataset):
         self.augment = SegmentationAugmentation(size=patch_size,
                                                 is_train=is_train)
 
+        # Pre-generate all masks in the main process so that
+        # dataloader workers only ever read cached files.
+        # (rasterio writes are not fork-safe for num_workers > 0)
+        os.makedirs(config.MASK_DIR, exist_ok=True)
+        for img_path, lbl_path in self.pairs:
+            mask_path = os.path.join(config.MASK_DIR,
+                                     os.path.basename(img_path))
+            if not os.path.exists(mask_path):
+                create_mask(lbl_path, img_path, mask_path)
+
     def __len__(self):
         return len(self.pairs)
 
@@ -34,7 +44,7 @@ class TissueSegmentationDataset(Dataset):
         img_path, lbl_path = self.pairs[idx]
 
         image = read_tif_image(img_path)
-        output_mask_path = os.path.join(config.MASK_DIR, img_path.split("/")[-1])
+        output_mask_path = os.path.join(config.MASK_DIR, os.path.basename(img_path))
         mask = create_mask(lbl_path, img_path, output_mask_path)
 
         image_t, mask_t = self.augment(image, mask)
