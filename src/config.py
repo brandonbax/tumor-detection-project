@@ -14,6 +14,8 @@ VAL_LABEL_DIR = os.path.join(DATASET_ROOT, "val", "label")
 TEST_IMAGE_DIR = os.path.join(DATASET_ROOT, "test", "image")
 TEST_LABEL_DIR = os.path.join(DATASET_ROOT, "test", "label")
 
+MASK_DIR = "masks"
+
 # ═══════════════════════════════════════════════
 #  Dataset Statistics (for normalization)
 # ═══════════════════════════════════════════════
