@@ -2,19 +2,52 @@ import geopandas as gpd
 
 import rasterio
 from rasterio.features import rasterize
+import numpy as np
+from PIL import Image
+import os
+import tifffile
+from typing import List, Tuple
+import config
 
 # Specs say that all classes (even the background) other than tissue_tumor and tissue_stroma
 # must be classified as other in the output.
 
-class_ids = {
-    'tissue_tumor': 1,
-    'tissue_stroma': 2,
-}
-
 def get_class_id(row) -> int:
     class_name = row['classification'].get('name')
     # Other classes get the default id of 0
-    return class_ids.get(class_name, 0)
+    return config.CLASS_NAME_TO_ID.get(class_name, 0)
+
+def read_tif_image(path: str) -> np.ndarray:
+    """
+    Read a .tif image and return an RGB uint8 numpy array (H, W, 3).
+ 
+    Handles single-channel, RGBA, channel-first layouts, and
+    non-uint8 dtypes transparently.
+    """
+    try:
+        img = tifffile.imread(path)
+    except Exception:
+        img = np.array(Image.open(path))
+ 
+    # Handle different channel orders / counts
+    if img.ndim == 2:
+        img = np.stack([img] * 3, axis=-1)
+    elif img.ndim == 3:
+        if img.shape[0] in (1, 3, 4):          # (C, H, W) → (H, W, C)
+            img = np.transpose(img, (1, 2, 0))
+        if img.shape[2] == 4:                   # RGBA → RGB
+            img = img[:, :, :3]
+        if img.shape[2] == 1:
+            img = np.concatenate([img] * 3, axis=-1)
+ 
+    # Normalise to uint8 if needed
+    if img.dtype != np.uint8:
+        if img.max() <= 1.0:
+            img = (img * 255).astype(np.uint8)
+        else:
+            img = img.astype(np.uint8)
+ 
+    return img
 
 def create_mask(label_path: str, image_path: str, output_mask_path: str) -> np.ndarray:
     geo_df = gpd.read_file(label_path)
@@ -43,7 +76,6 @@ def create_mask(label_path: str, image_path: str, output_mask_path: str) -> np.n
     return mask
 
 def match_image_label_pairs(label_path: str, image_path: str) -> List[Tuple[str, str]]:
-
     image_ext = ".tif"
     label_ext = ".geojson"
  
@@ -67,3 +99,19 @@ def match_image_label_pairs(label_path: str, image_path: str) -> List[Tuple[str,
             print(f"No label found for image: {images[stem]}")
 
     return pairs
+
+def compute_dataset_stats(image_dir: str) -> Tuple[np.ndarray, np.ndarray]:
+    means, stds = [], []
+    for f in os.listdir(image_dir):
+        if f.endswith('.tif'):
+            path = os.path.join(image_dir, f)
+            img = read_tif_image(path).astype(np.float32) / 255.0
+            means.append(img.mean(axis=(0, 1)))
+            stds.append(img.std(axis=(0, 1)))
+    return np.mean(means, axis=0), np.mean(stds, axis=0)
+
+if __name__ == "__main__":
+    print("Dataset stats:")
+    means, stds = compute_dataset_stats(config.TRAIN_IMAGE_DIR)
+    print("Means:", means)
+    print("Stds:", stds)
