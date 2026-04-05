@@ -14,10 +14,11 @@ def dummy_dataset_paths():
 def test_tissue_segmentation_dataset_length(mocker, dummy_dataset_paths):
     """Test that the dataset returns the correct length."""
     mock_match = mocker.patch('task1.dataset.match_image_label_pairs')
-    
+    mocker.patch('task1.dataset.create_mask')
+
     image_dir, mask_dir = dummy_dataset_paths
     mock_match.return_value = [("img0.tif", "lbl0.geojson"), ("img1.tif", "lbl1.geojson"), ("img2.tif", "lbl2.geojson")]
-    
+
     dataset = TissueSegmentationDataset(image_dir, mask_dir)
     assert len(dataset) == 3
 
