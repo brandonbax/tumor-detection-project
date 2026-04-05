@@ -1,13 +1,18 @@
-import geopandas as gpd
-
-import rasterio
-from rasterio.features import rasterize
-import numpy as np
-from PIL import Image
 import os
-import tifffile
+import warnings
 from typing import List, Tuple
+
+import geopandas as gpd
+import numpy as np
+import rasterio
+from rasterio.errors import NotGeoreferencedWarning
+from rasterio.features import rasterize
+from PIL import Image
+import tifffile
+
 import config
+
+warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
 
 # Specs say that all classes (even the background) other than tissue_tumor and tissue_stroma
 # must be classified as other in the output.
@@ -50,6 +55,13 @@ def read_tif_image(path: str) -> np.ndarray:
     return img
 
 def create_mask(label_path: str, image_path: str, output_mask_path: str) -> np.ndarray:
+    # Return cached mask if it already exists on disk
+    if os.path.exists(output_mask_path):
+        with rasterio.open(output_mask_path) as src:
+            return src.read(1)
+
+    os.makedirs(os.path.dirname(output_mask_path), exist_ok=True)
+
     geo_df = gpd.read_file(label_path)
     # Adds a new column with class id
     geo_df['class_id'] = geo_df.apply(get_class_id, axis=1)
@@ -62,7 +74,7 @@ def create_mask(label_path: str, image_path: str, output_mask_path: str) -> np.n
         mask = rasterize(shapes=shapes, out_shape=(img.height, img.width),
                          transform=img.transform, fill=0, dtype='uint8')
 
-        # The mask should be saved as a file, so it doesn't have to be recreated and held in memory
+        # Save the mask so it doesn't have to be recreated on subsequent runs
         meta = img.meta.copy()
         meta.update({
             'count': 1,
@@ -75,7 +87,7 @@ def create_mask(label_path: str, image_path: str, output_mask_path: str) -> np.n
 
     return mask
 
-def match_image_label_pairs(label_path: str, image_path: str) -> List[Tuple[str, str]]:
+def match_image_label_pairs(image_path: str, label_path: str) -> List[Tuple[str, str]]:
     image_ext = ".tif"
     label_ext = ".geojson"
  
@@ -89,6 +101,9 @@ def match_image_label_pairs(label_path: str, image_path: str) -> List[Tuple[str,
     for f in os.listdir(label_path):
         if f.endswith(label_ext):
             stem = os.path.splitext(f)[0]
+            # Strip the _tissue suffix so stems match image filenames
+            if stem.endswith("_tissue"):
+                stem = stem[:-len("_tissue")]
             labels[stem] = os.path.join(label_path, f)
  
     pairs = []
