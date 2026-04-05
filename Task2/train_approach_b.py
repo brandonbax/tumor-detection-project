@@ -1,33 +1,26 @@
 """
 Task 2 — Approach B (Step 2): Frozen Encoder + Linear Classifier
 
-Loads the SimCLR pre-trained encoder, freezes it, and trains a linear
-classification head on the 7500 labelled training patches.
-
-Also evaluates the latent space quality using:
-  - t-SNE visualisation
-  - Silhouette score
+Usage:
+  python train_approach_b.py --backbone resnet18
+  python train_approach_b.py --backbone resnet50
+  python train_approach_b.py --backbone efficientnet_b0
 """
 
+import argparse
 import json
 import numpy as np
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models, transforms
-from sklearn.metrics import classification_report, accuracy_score
+from sklearn.metrics import classification_report, accuracy_score, silhouette_score
 from sklearn.manifold import TSNE
-from sklearn.metrics import silhouette_score
-import matplotlib.pyplot as plt
 from pathlib import Path
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
-DATA_DIR    = Path(__file__).parent / "task2_dataset"
-CKPT_DIR    = Path(__file__).parent / "checkpoints_b"
-OUTPUT_DIR  = Path(__file__).parent / "checkpoints_b"
-ENCODER_CKPT = CKPT_DIR / "supcon_encoder.pth"  # trained by pretrain_supcon.py
+DATA_DIR = Path(__file__).parent / "task2_dataset"
 
-# ── Hyperparameters ────────────────────────────────────────────────────────────
 BATCH_SIZE     = 64
 EPOCHS         = 50
 LR             = 1e-3
@@ -39,7 +32,6 @@ DEVICE = (
     torch.device("cuda") if torch.cuda.is_available()          else
     torch.device("cpu")
 )
-print(f"Using device: {DEVICE}")
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD  = [0.229, 0.224, 0.225]
@@ -78,29 +70,38 @@ class NucleiDataset(Dataset):
         return img, label
 
 
-# ── Model ──────────────────────────────────────────────────────────────────────
+def load_encoder(backbone, ckpt_path):
+    if backbone == "resnet18":
+        m       = models.resnet18(weights=None)
+        encoder = nn.Sequential(*list(m.children())[:-1])
+        feat_dim = 512
+    elif backbone == "resnet50":
+        m       = models.resnet50(weights=None)
+        encoder = nn.Sequential(*list(m.children())[:-1])
+        feat_dim = 2048
+    elif backbone == "efficientnet_b0":
+        m       = models.efficientnet_b0(weights=None)
+        encoder = nn.Sequential(m.features, nn.AdaptiveAvgPool2d(1))
+        feat_dim = 1280
+
+    encoder.load_state_dict(torch.load(ckpt_path, map_location=DEVICE))
+    for p in encoder.parameters():
+        p.requires_grad = False
+    return encoder.to(DEVICE), feat_dim
+
+
 class FrozenEncoderClassifier(nn.Module):
-    def __init__(self, encoder, num_classes=NUM_CLASSES):
+    def __init__(self, encoder, feat_dim, num_classes):
         super().__init__()
         self.encoder    = encoder
-        self.classifier = nn.Linear(512, num_classes)
+        self.classifier = nn.Linear(feat_dim, num_classes)
 
     def forward(self, x):
         with torch.no_grad():
-            features = self.encoder(x).flatten(1)  # (B, 512) — frozen
-        return self.classifier(features)
+            f = self.encoder(x).flatten(1)
+        return self.classifier(f)
 
 
-def load_encoder():
-    backbone = models.resnet18(weights=None)
-    encoder  = nn.Sequential(*list(backbone.children())[:-1])
-    encoder.load_state_dict(torch.load(ENCODER_CKPT, map_location=DEVICE))
-    for param in encoder.parameters():
-        param.requires_grad = False   # freeze encoder
-    return encoder.to(DEVICE)
-
-
-# ── Training ───────────────────────────────────────────────────────────────────
 def train_one_epoch(model, loader, criterion, optimizer):
     model.train()
     total_loss, correct, total = 0.0, 0, 0
@@ -135,40 +136,45 @@ def evaluate(model, loader, criterion):
     return total_loss / total, correct / total, all_preds, all_labels
 
 
-# ── Latent Space Evaluation ────────────────────────────────────────────────────
 @torch.no_grad()
 def extract_features(encoder, loader):
     encoder.eval()
     feats, labels = [], []
     for imgs, lbls in loader:
-        imgs = imgs.to(DEVICE)
-        f    = encoder(imgs).flatten(1).cpu().numpy()
+        f = encoder(imgs.to(DEVICE)).flatten(1).cpu().numpy()
         feats.append(f)
         labels.extend(lbls.numpy())
     return np.concatenate(feats), np.array(labels)
 
 
-def plot_tsne(features, labels, class_names, save_path):
-    print("Running t-SNE (this may take ~1 min)...")
-    tsne    = TSNE(n_components=2, perplexity=40, random_state=42, max_iter=1000)
-    reduced = tsne.fit_transform(features)
-
+def plot_tsne(features, labels, class_names, title, save_path):
+    print("Running t-SNE...")
+    reduced = TSNE(n_components=2, perplexity=40, random_state=42,
+                   max_iter=1000).fit_transform(features)
     plt.figure(figsize=(8, 6))
-    colors = ["#e6194b", "#4363d8", "#3cb44b"]
     for i, name in enumerate(class_names):
         mask = labels == i
         plt.scatter(reduced[mask, 0], reduced[mask, 1],
-                    c=colors[i], label=name, alpha=0.5, s=8)
+                    label=name, alpha=0.5, s=8)
     plt.legend(markerscale=2)
-    plt.title("t-SNE of SimCLR Encoder Features (Validation Set)")
+    plt.title(title)
     plt.tight_layout()
     plt.savefig(save_path, dpi=150)
     plt.close()
-    print(f"  t-SNE plot saved to {save_path}")
+    print(f"  t-SNE saved to {save_path}")
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--backbone", default="resnet18",
+                        choices=["resnet18", "resnet50", "efficientnet_b0"])
+    args = parser.parse_args()
+
+    ckpt_dir   = Path(__file__).parent / f"checkpoints_b_{args.backbone}"
+    encoder_ckpt = ckpt_dir / "supcon_encoder.pth"
+    print(f"Backbone: {args.backbone} | Checkpoint: {encoder_ckpt}")
+    print(f"Using device: {DEVICE}")
+
     with open(DATA_DIR / "class_names.json") as f:
         class_names = [v for _, v in sorted(json.load(f).items(), key=lambda x: int(x[0]))]
     print(f"Classes: {class_names}")
@@ -182,20 +188,18 @@ def main():
         batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True
     )
 
-    encoder   = load_encoder()
-    model     = FrozenEncoderClassifier(encoder).to(DEVICE)
+    encoder, feat_dim = load_encoder(args.backbone, encoder_ckpt)
+    model     = FrozenEncoderClassifier(encoder, feat_dim, NUM_CLASSES).to(DEVICE)
     criterion = nn.CrossEntropyLoss()
-    # Higher LR than Approach A — only the linear head has trainable params
     optimizer = torch.optim.Adam(model.classifier.parameters(), lr=LR)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=4, factor=0.5)
 
-    best_val_acc    = 0.0
-    epochs_no_impro = 0
+    best_val_acc, epochs_no_impro = 0.0, 0
     history = {"train_loss": [], "val_loss": [], "train_acc": [], "val_acc": []}
 
     for epoch in range(1, EPOCHS + 1):
-        train_loss, train_acc                    = train_one_epoch(model, train_loader, criterion, optimizer)
-        val_loss,   val_acc, val_preds, val_lbls = evaluate(model, val_loader, criterion)
+        train_loss, train_acc                        = train_one_epoch(model, train_loader, criterion, optimizer)
+        val_loss,   val_acc, val_preds, val_labels   = evaluate(model, val_loader, criterion)
         scheduler.step(val_loss)
 
         history["train_loss"].append(train_loss)
@@ -208,9 +212,8 @@ def main():
               f"val_loss={val_loss:.4f}  val_acc={val_acc:.4f}")
 
         if val_acc > best_val_acc:
-            best_val_acc    = val_acc
-            epochs_no_impro = 0
-            torch.save(model.state_dict(), OUTPUT_DIR / "best_model_b.pth")
+            best_val_acc, epochs_no_impro = val_acc, 0
+            torch.save(model.state_dict(), ckpt_dir / "best_model_b.pth")
             print(f"  -> Saved best model (val_acc={best_val_acc:.4f})")
         else:
             epochs_no_impro += 1
@@ -218,36 +221,32 @@ def main():
                 print(f"  -> Early stopping at epoch {epoch}")
                 break
 
-    # ── Training curves ────────────────────────────────────────────────────────
     epochs_ran = range(1, len(history["train_loss"]) + 1)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
     ax1.plot(epochs_ran, history["train_loss"], label="Train")
     ax1.plot(epochs_ran, history["val_loss"],   label="Val")
-    ax1.set_title("Loss (Approach B)"); ax1.set_xlabel("Epoch"); ax1.legend()
+    ax1.set_title(f"Loss — {args.backbone}"); ax1.set_xlabel("Epoch"); ax1.legend()
     ax2.plot(epochs_ran, history["train_acc"], label="Train")
     ax2.plot(epochs_ran, history["val_acc"],   label="Val")
     ax2.axhline(0.7083, color="r", linestyle="--", label="Baseline")
-    ax2.set_title("Accuracy (Approach B)"); ax2.set_xlabel("Epoch"); ax2.legend()
+    ax2.set_title(f"Accuracy — {args.backbone}"); ax2.set_xlabel("Epoch"); ax2.legend()
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "training_curves_b.png", dpi=150)
+    plt.savefig(ckpt_dir / f"training_curves_b_{args.backbone}.png", dpi=150)
     plt.close()
-    print(f"Training curves saved to {OUTPUT_DIR / 'training_curves_b.png'}")
 
-    # ── Final evaluation ───────────────────────────────────────────────────────
-    print("\n── Final Evaluation (best checkpoint) ──")
-    model.load_state_dict(torch.load(OUTPUT_DIR / "best_model_b.pth", map_location=DEVICE))
-    _, _, val_preds, val_lbls = evaluate(model, val_loader, criterion)
-    print(classification_report(val_lbls, val_preds, target_names=class_names, digits=4))
-    print(f"Overall accuracy: {accuracy_score(val_lbls, val_preds):.4f}")
+    print("\n── Final Evaluation ──")
+    model.load_state_dict(torch.load(ckpt_dir / "best_model_b.pth", map_location=DEVICE))
+    _, _, val_preds, val_labels = evaluate(model, val_loader, criterion)
+    print(classification_report(val_labels, val_preds, target_names=class_names, digits=4))
+    print(f"Overall accuracy: {accuracy_score(val_labels, val_preds):.4f}")
 
-    # ── Latent space evaluation ────────────────────────────────────────────────
     print("\n── Latent Space Evaluation ──")
-    features, labels = extract_features(encoder, val_loader)
-
-    sil = silhouette_score(features, labels, sample_size=2000, random_state=42)
-    print(f"Silhouette score: {sil:.4f}  (range -1 to 1, higher = better separated)")
-
-    plot_tsne(features, labels, class_names, OUTPUT_DIR / "tsne_simclr.png")
+    feats, lbls = extract_features(encoder, val_loader)
+    sil = silhouette_score(feats, lbls, sample_size=2000, random_state=42)
+    print(f"Silhouette score: {sil:.4f}")
+    plot_tsne(feats, lbls, class_names,
+              f"t-SNE — SupCon {args.backbone}",
+              ckpt_dir / f"tsne_{args.backbone}.png")
 
 
 if __name__ == "__main__":
