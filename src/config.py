@@ -6,15 +6,15 @@ import os
 DATASET_ROOT = "Dataset_Splits"
 
 TRAIN_IMAGE_DIR = os.path.join(DATASET_ROOT, "train", "image")
-TRAIN_LABEL_DIR = os.path.join(DATASET_ROOT, "train", "label")
+TRAIN_LABEL_DIR = os.path.join(DATASET_ROOT, "train", "tissue")
 
-VAL_IMAGE_DIR = os.path.join(DATASET_ROOT, "val", "image")
-VAL_LABEL_DIR = os.path.join(DATASET_ROOT, "val", "label")
+VAL_IMAGE_DIR = os.path.join(DATASET_ROOT, "validation", "image")
+VAL_LABEL_DIR = os.path.join(DATASET_ROOT, "validation", "tissue")
 
 TEST_IMAGE_DIR = os.path.join(DATASET_ROOT, "test", "image")
-TEST_LABEL_DIR = os.path.join(DATASET_ROOT, "test", "label")
+TEST_LABEL_DIR = os.path.join(DATASET_ROOT, "test", "tissue")
 
-MASK_DIR = "masks"
+MASK_DIR = os.path.join("src", "task1", "masks")
 
 # ═══════════════════════════════════════════════
 #  Dataset Statistics (for normalization)
@@ -34,6 +34,27 @@ CLASS_NAME_TO_ID = {
 #  Training Parameters
 # ═══════════════════════════════════════════════
 PATCH_SIZE = 256
-UNET_BATCH_SIZE = 16
-AE_BATCH_SIZE = 32
 NUM_WORKERS = 4
+
+NUM_CLASSES = 3
+CLASS_NAMES = ['Other', 'Tumor', 'Stroma']
+IMAGE_CHANNELS = 3
+
+SEED = 42
+CHECKPOINT_DIR = os.path.join("src", "task1", "checkpoints")
+RESULTS_DIR = os.path.join("src", "task1", "results")
+
+UNET_EPOCHS = 50
+UNET_BATCH_SIZE = 16
+UNET_LR = 1e-4
+UNET_WEIGHT_DECAY = 1e-4
+
+AE_EPOCHS = 30
+AE_BATCH_SIZE = 32
+AE_LR = 1e-3
+AE_WEIGHT_DECAY = 1e-4
+
+AE_SEG_EPOCHS = 50
+AE_SEG_BATCH_SIZE = 8
+AE_SEG_LR = 1e-4
+AE_SEG_WEIGHT_DECAY = 1e-4
