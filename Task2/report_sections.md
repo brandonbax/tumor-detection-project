@@ -117,14 +117,15 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 ### ResNet-50 + SupCon
 | Metric | Val | Test |
 |---|---|---|
-| Overall accuracy | TBD | TBD |
-| Silhouette score | TBD | — |
+| Overall accuracy | 0.6510 | TBD |
+| Silhouette score | -0.0348 | — |
+| Early stopping at epoch | 12 | — |
 
 | Class | Precision | Recall | F1 |
 |---|---|---|---|
-| nuclei_histiocyte | TBD | TBD | TBD |
-| nuclei_lymphocyte | TBD | TBD | TBD |
-| nuclei_tumor | TBD | TBD | TBD |
+| nuclei_histiocyte | 0.6851 | 0.5314 | 0.5986 |
+| nuclei_lymphocyte | 0.6008 | 0.6771 | 0.6367 |
+| nuclei_tumor | 0.6784 | 0.7443 | 0.7098 |
 
 ### EfficientNet-B0 + SupCon
 | Metric | Val | Test |
