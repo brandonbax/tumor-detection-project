@@ -21,3 +21,4 @@ if torch.cuda.is_available():
     print(f"\nSmoke test passed: matmul result shape {c.shape} on {c.device}")
 else:
     print("\nCUDA is NOT available. Training will run on CPU.")
+    raise SystemExit(1)
