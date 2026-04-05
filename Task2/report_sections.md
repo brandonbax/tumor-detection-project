@@ -127,20 +127,27 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 | nuclei_lymphocyte | 0.6008 | 0.6771 | 0.6367 |
 | nuclei_tumor | 0.6784 | 0.7443 | 0.7098 |
 
-### EfficientNet-B0 + SupCon
+### EfficientNet-B0 + SupCon ✓ Best
 | Metric | Val | Test |
 |---|---|---|
-| Overall accuracy | TBD | TBD |
-| Silhouette score | TBD | — |
+| Overall accuracy | **0.6714** | TBD |
+| Silhouette score | -0.0190 | — |
+| Early stopping at epoch | 15 | — |
 
 | Class | Precision | Recall | F1 |
 |---|---|---|---|
-| nuclei_histiocyte | TBD | TBD | TBD |
-| nuclei_lymphocyte | TBD | TBD | TBD |
-| nuclei_tumor | TBD | TBD | TBD |
+| nuclei_histiocyte | 0.6857 | 0.5143 | 0.5878 |
+| nuclei_lymphocyte | 0.6104 | 0.7229 | 0.6619 |
+| nuclei_tumor | 0.7292 | 0.7771 | 0.7524 |
 
-### Best Approach B backbone (to be determined)
-*(Update after all runs complete)*
+### Backbone comparison summary (val accuracy)
+| Backbone | Val Acc | Silhouette |
+|---|---|---|
+| ResNet-18 | 0.6443 | -0.0270 |
+| ResNet-50 | 0.6510 | -0.0348 |
+| **EfficientNet-B0** | **0.6714** | **-0.0190** |
+
+**Winner: EfficientNet-B0** — best val accuracy AND best silhouette score (least negative). Also matches Approach A backbone for fair comparison.
 
 ---
 
