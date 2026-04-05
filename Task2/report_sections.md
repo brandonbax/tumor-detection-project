@@ -296,6 +296,160 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 
 ---
 
+---
+
+## References (BibTeX)
+
+```bibtex
+% SimCLR
+@inproceedings{chen2020simclr,
+  author    = {Ting Chen and Simon Kornblith and Mohammad Norouzi and Geoffrey Hinton},
+  title     = {A Simple Framework for Contrastive Learning of Visual Representations},
+  booktitle = {Proceedings of the 37th International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {119},
+  pages     = {1597--1607},
+  publisher = {PMLR},
+  year      = {2020},
+  eprint    = {2002.05709},
+  archivePrefix = {arXiv}
+}
+
+% SupCon
+@inproceedings{khosla2020supcon,
+  author    = {Prannay Khosla and Piotr Teterwak and Chen Wang and Aaron Sarna and
+               Yonglong Tian and Phillip Isola and Aaron Maschinot and Ce Liu and
+               Dilip Krishnan},
+  title     = {Supervised Contrastive Learning},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {33},
+  pages     = {18661--18673},
+  year      = {2020},
+  eprint    = {2004.11362},
+  archivePrefix = {arXiv}
+}
+
+% ResNet
+@inproceedings{he2016resnet,
+  author    = {Kaiming He and Xiangyu Zhang and Shaoqing Ren and Jian Sun},
+  title     = {Deep Residual Learning for Image Recognition},
+  booktitle = {Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages     = {770--778},
+  year      = {2016},
+  doi       = {10.1109/CVPR.2016.90},
+  eprint    = {1512.03385},
+  archivePrefix = {arXiv}
+}
+
+% EfficientNet
+@inproceedings{tan2019efficientnet,
+  author    = {Mingxing Tan and Quoc V. Le},
+  title     = {{EfficientNet}: Rethinking Model Scaling for Convolutional Neural Networks},
+  booktitle = {Proceedings of the 36th International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {97},
+  pages     = {6105--6114},
+  publisher = {PMLR},
+  year      = {2019},
+  eprint    = {1905.11946},
+  archivePrefix = {arXiv}
+}
+
+% HoVer-Net — nuclei segmentation & classification in histopathology
+@article{graham2019hovernet,
+  author    = {Simon Graham and Quoc Dang Vu and Shan E Ahmed Raza and Ayesha Azam and
+               Yee Wah Tsang and Jin Tae Kwak and Nasir Rajpoot},
+  title     = {{HoVer-Net}: Simultaneous Segmentation and Classification of Nuclei in
+               Multi-Tissue Histology Images},
+  journal   = {Medical Image Analysis},
+  volume    = {58},
+  pages     = {101563},
+  year      = {2019},
+  doi       = {10.1016/j.media.2019.101563},
+  eprint    = {1812.06499},
+  archivePrefix = {arXiv}
+}
+
+% Contrastive SSL Survey
+@article{jaiswal2021survey,
+  author    = {Ashish Jaiswal and Ashwin Ramesh Babu and Mohammad Zaki Zadeh and
+               Debapriya Banerjee and Fillia Makedon},
+  title     = {A Survey on Contrastive Self-Supervised Learning},
+  journal   = {Technologies},
+  volume    = {9},
+  number    = {1},
+  pages     = {2},
+  year      = {2021},
+  doi       = {10.3390/technologies9010002},
+  eprint    = {2011.00362},
+  archivePrefix = {arXiv}
+}
+
+% Transfer learning for medical imaging
+@article{tajbakhsh2016transfer,
+  author    = {Nima Tajbakhsh and Jae Y. Shin and Suryakanth R. Gurudu and
+               R. Todd Hurst and Christopher B. Kendall and Michael B. Gotway and
+               Jianming Liang},
+  title     = {Convolutional Neural Networks for Medical Image Analysis:
+               Full Training or Fine Tuning?},
+  journal   = {IEEE Transactions on Medical Imaging},
+  volume    = {35},
+  number    = {5},
+  pages     = {1299--1312},
+  year      = {2016},
+  doi       = {10.1109/TMI.2016.2535302}
+}
+
+% Deep learning for computational histopathology survey
+@article{srinidhi2021histopathology,
+  author    = {Chetan L. Srinidhi and Ozan Ciga and Anne L. Martel},
+  title     = {Deep Neural Network Models for Computational Histopathology: A Survey},
+  journal   = {Medical Image Analysis},
+  volume    = {67},
+  pages     = {101813},
+  year      = {2021},
+  doi       = {10.1016/j.media.2020.101813},
+  eprint    = {1912.12378},
+  archivePrefix = {arXiv}
+}
+
+% Self-supervised contrastive learning for digital histopathology
+@article{ciga2022selfsuphisto,
+  author    = {Ozan Ciga and Tony Xu and Anne Louise Martel},
+  title     = {Self Supervised Contrastive Learning for Digital Histopathology},
+  journal   = {Machine Learning with Applications},
+  volume    = {7},
+  pages     = {100198},
+  year      = {2022},
+  doi       = {10.1016/j.mlwa.2021.100198},
+  eprint    = {2011.13971},
+  archivePrefix = {arXiv}
+}
+
+% t-SNE
+@article{vandermaaten2008tsne,
+  author    = {Laurens van der Maaten and Geoffrey Hinton},
+  title     = {Visualizing Data using {t-SNE}},
+  journal   = {Journal of Machine Learning Research},
+  volume    = {9},
+  pages     = {2579--2605},
+  year      = {2008},
+  url       = {https://www.jmlr.org/papers/v9/vandermaaten08a.html}
+}
+
+% UMAP
+@article{mcinnes2018umap,
+  author    = {Leland McInnes and John Healy and James Melville},
+  title     = {{UMAP}: Uniform Manifold Approximation and Projection for Dimension Reduction},
+  journal   = {arXiv preprint},
+  year      = {2018},
+  eprint    = {1802.03426},
+  archivePrefix = {arXiv}
+}
+```
+
+---
+
 ## Figures needed for report
 - [ ] Training curves — loss & accuracy vs epoch (Approach A) → `checkpoints_a/training_curves_a.png`
 - [ ] Training curves — loss & accuracy vs epoch (Approach B) → `checkpoints_b/training_curves_b.png`
