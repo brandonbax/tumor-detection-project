@@ -100,26 +100,34 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 - Loss: CrossEntropy, Adam lr=1e-3 (higher LR appropriate for single linear layer)
 - Early stopping patience=7 on val_acc
 
-### Results (final run)
+### SimCLR Results (original, replaced)
 | Metric | Value |
 |---|---|
-| Overall accuracy | **0.5995** |
-| vs baseline (0.7083) | **below baseline by 10.9%** |
-| vs Approach A (0.7548) | **worse by 15.5%** |
-| Early stopping at epoch | 30 |
+| Overall val accuracy | 0.5995 |
+| Silhouette score | -0.0139 |
 
-#### Per-class breakdown
+### SupCon Results (final)
+| Metric | Value |
+|---|---|
+| Overall val accuracy | **0.6443** |
+| vs SimCLR | +4.5% improvement |
+| vs baseline (0.7083) | below baseline |
+| vs Approach A (0.7514) | worse by 10.7% |
+| Early stopping at epoch | 21 |
+
+#### Per-class breakdown (val set)
 | Class | Precision | Recall | F1 |
 |---|---|---|---|
-| nuclei_histiocyte | 0.5954 | 0.4457 | 0.5098 |
-| nuclei_lymphocyte | 0.6006 | 0.6229 | 0.6115 |
-| nuclei_tumor | 0.6012 | 0.7300 | 0.6594 |
-| **Overall** | **0.5990** | **0.5995** | **0.5936** |
+| nuclei_histiocyte | 0.6761 | 0.4771 | 0.5595 |
+| nuclei_lymphocyte | 0.6038 | 0.6900 | 0.6440 |
+| nuclei_tumor | 0.6650 | 0.7657 | 0.7118 |
+| **Overall** | 0.6483 | **0.6443** | 0.6384 |
 
-### Latent Space Evaluation
-- **Silhouette score: -0.0139** — essentially 0, confirming no class separation in encoder features
+### Latent Space Evaluation (SupCon)
+- **Silhouette score: -0.0270** — still near 0, classes still overlapping in encoder feature space
+- SupCon improved accuracy over SimCLR (+4.5%) but silhouette paradoxically worse
+- Key insight: silhouette measures linear separability in 512-d feature space — near-0 score means the frozen linear head is the bottleneck, not the encoder quality per se
 - t-SNE plot saved: `checkpoints_b/tsne_simclr.png`
-- A silhouette score near 0 means classes are completely overlapping in the latent space — the SimCLR encoder learned instance-level similarity but no class-discriminative structure
 
 ---
 
