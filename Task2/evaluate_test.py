@@ -70,10 +70,25 @@ def load_model_a(num_classes):
     return model.to(DEVICE).eval()
 
 
-def load_model_b(num_classes):
-    backbone = models.resnet18(weights=None)
-    encoder  = nn.Sequential(*list(backbone.children())[:-1])
-    encoder.load_state_dict(torch.load(ENCODER_B, map_location=DEVICE))
+def load_model_b(backbone_name, num_classes):
+    ckpt_dir     = Path(__file__).parent / f"checkpoints_b_{backbone_name}"
+    encoder_ckpt = ckpt_dir / "supcon_encoder.pth"
+    model_ckpt   = ckpt_dir / "best_model_b.pth"
+
+    if backbone_name == "resnet18":
+        m = models.resnet18(weights=None)
+        encoder = nn.Sequential(*list(m.children())[:-1])
+        feat_dim = 512
+    elif backbone_name == "resnet50":
+        m = models.resnet50(weights=None)
+        encoder = nn.Sequential(*list(m.children())[:-1])
+        feat_dim = 2048
+    elif backbone_name == "efficientnet_b0":
+        m = models.efficientnet_b0(weights=None)
+        encoder = nn.Sequential(m.features, nn.AdaptiveAvgPool2d(1))
+        feat_dim = 1280
+
+    encoder.load_state_dict(torch.load(encoder_ckpt, map_location=DEVICE))
     for p in encoder.parameters():
         p.requires_grad = False
 
@@ -81,7 +96,7 @@ def load_model_b(num_classes):
         def __init__(self):
             super().__init__()
             self.encoder    = encoder
-            self.classifier = nn.Linear(512, num_classes)
+            self.classifier = nn.Linear(feat_dim, num_classes)
 
         def forward(self, x):
             with torch.no_grad():
@@ -89,7 +104,7 @@ def load_model_b(num_classes):
             return self.classifier(f)
 
     model = FrozenEncoderClassifier()
-    model.load_state_dict(torch.load(CKPT_B, map_location=DEVICE))
+    model.load_state_dict(torch.load(model_ckpt, map_location=DEVICE))
     return model.to(DEVICE).eval()
 
 
@@ -130,12 +145,18 @@ def main():
     plot_confusion_matrix(preds_a, lbls, TARGET_CLASSES,
                           "Approach A — Test Set", OUTPUT_DIR / "confusion_matrix_a.png")
 
-    print("\n── Approach B (SupCon + Linear Head) ──")
-    preds_b, _  = run_inference(load_model_b(len(TARGET_CLASSES)), loader)
-    print(classification_report(lbls, preds_b, target_names=TARGET_CLASSES, digits=4))
-    print(f"Overall accuracy: {accuracy_score(lbls, preds_b):.4f}")
-    plot_confusion_matrix(preds_b, lbls, TARGET_CLASSES,
-                          "Approach B — Test Set", OUTPUT_DIR / "confusion_matrix_b.png")
+    for backbone in ["resnet18", "resnet50", "efficientnet_b0"]:
+        ckpt = Path(__file__).parent / f"checkpoints_b_{backbone}" / "best_model_b.pth"
+        if not ckpt.exists():
+            print(f"\n── Approach B ({backbone}) — checkpoint not found, skipping ──")
+            continue
+        print(f"\n── Approach B SupCon ({backbone}) ──")
+        preds_b, _ = run_inference(load_model_b(backbone, len(TARGET_CLASSES)), loader)
+        print(classification_report(lbls, preds_b, target_names=TARGET_CLASSES, digits=4))
+        print(f"Overall accuracy: {accuracy_score(lbls, preds_b):.4f}")
+        plot_confusion_matrix(preds_b, lbls, TARGET_CLASSES,
+                              f"Approach B {backbone} — Test Set",
+                              OUTPUT_DIR / f"confusion_matrix_b_{backbone}.png")
 
 
 if __name__ == "__main__":

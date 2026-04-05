@@ -100,6 +100,49 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 - Loss: CrossEntropy, Adam lr=1e-3 (higher LR appropriate for single linear layer)
 - Early stopping patience=7 on val_acc
 
+## Approach B — Backbone Comparison
+
+### ResNet-18 + SupCon (baseline backbone)
+| Metric | Val | Test |
+|---|---|---|
+| Overall accuracy | 0.6443 | 0.6416 |
+| Silhouette score | -0.0270 | — |
+
+| Class | Precision | Recall | F1 |
+|---|---|---|---|
+| nuclei_histiocyte | 0.4659 | 0.3581 | 0.4049 |
+| nuclei_lymphocyte | 0.7032 | 0.6600 | 0.6809 |
+| nuclei_tumor | 0.6667 | 0.8086 | 0.7308 |
+
+### ResNet-50 + SupCon
+| Metric | Val | Test |
+|---|---|---|
+| Overall accuracy | TBD | TBD |
+| Silhouette score | TBD | — |
+
+| Class | Precision | Recall | F1 |
+|---|---|---|---|
+| nuclei_histiocyte | TBD | TBD | TBD |
+| nuclei_lymphocyte | TBD | TBD | TBD |
+| nuclei_tumor | TBD | TBD | TBD |
+
+### EfficientNet-B0 + SupCon
+| Metric | Val | Test |
+|---|---|---|
+| Overall accuracy | TBD | TBD |
+| Silhouette score | TBD | — |
+
+| Class | Precision | Recall | F1 |
+|---|---|---|---|
+| nuclei_histiocyte | TBD | TBD | TBD |
+| nuclei_lymphocyte | TBD | TBD | TBD |
+| nuclei_tumor | TBD | TBD | TBD |
+
+### Best Approach B backbone (to be determined)
+*(Update after all runs complete)*
+
+---
+
 ### SimCLR Results (original, replaced)
 | Metric | Value |
 |---|---|
