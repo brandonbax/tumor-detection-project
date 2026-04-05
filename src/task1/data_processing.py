@@ -55,6 +55,17 @@ def read_tif_image(path: str) -> np.ndarray:
     return img
 
 def create_mask(label_path: str, image_path: str, output_mask_path: str) -> np.ndarray:
+    """
+    Create a mask from a label file and an image file.
+    
+    Args:
+        label_path: Path to the label file.
+        image_path: Path to the image file.
+        output_mask_path: Path to save the mask.
+    
+    Returns:
+        np.ndarray: The mask as a numpy array.
+    """
     # Return cached mask if it already exists on disk
     if os.path.exists(output_mask_path):
         with rasterio.open(output_mask_path) as src:
@@ -88,6 +99,16 @@ def create_mask(label_path: str, image_path: str, output_mask_path: str) -> np.n
     return mask
 
 def match_image_label_pairs(image_path: str, label_path: str) -> List[Tuple[str, str]]:
+    """
+    Match image and label pairs.
+    
+    Args:
+        image_path: Path to the image directory.
+        label_path: Path to the label directory.
+    
+    Returns:
+        List[Tuple[str, str]]: List of (image_path, label_path) pairs.
+    """
     image_ext = ".tif"
     label_ext = ".geojson"
  
@@ -116,6 +137,15 @@ def match_image_label_pairs(image_path: str, label_path: str) -> List[Tuple[str,
     return pairs
 
 def compute_dataset_stats(image_dir: str) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Compute the mean and standard deviation of the dataset.
+    
+    Args:
+        image_dir: Path to the image directory.
+    
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: Tuple of (means, stds).
+    """
     means, stds = [], []
     for f in os.listdir(image_dir):
         if f.endswith('.tif'):
@@ -126,6 +156,9 @@ def compute_dataset_stats(image_dir: str) -> Tuple[np.ndarray, np.ndarray]:
     return np.mean(means, axis=0), np.mean(stds, axis=0)
 
 if __name__ == "__main__":
+    """
+    Compute the mean and standard deviation of the dataset.
+    """
     print("Dataset stats:")
     means, stds = compute_dataset_stats(config.TRAIN_IMAGE_DIR)
     print("Means:", means)
