@@ -23,13 +23,13 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 
 ---
 
-## Approach A: End-to-End ResNet-18 Classifier
+## Approach A: End-to-End EfficientNet-B0 Classifier
 
 ### Architecture
-- ResNet-18 pretrained on ImageNet (transfer learning)
-- Final FC replaced: 512 → 3 classes
+- EfficientNet-B0 pretrained on ImageNet (transfer learning)
+- Final classifier replaced: Linear(1280, 3)
 - All layers fine-tuned (not frozen)
-- ~11.2M trainable parameters
+- ~5.3M trainable parameters (closest match to ~5M baseline)
 
 ### Training setup
 - Loss: CrossEntropy
@@ -74,29 +74,29 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 ### Key observations
 - Histiocyte consistently weakest — rarest class, visually similar to others
 - Train acc reached ~0.89–0.90 while val acc plateaued ~0.74 → moderate overfitting
-- Overfitting gap suggests the 7500-sample train set is small relative to ResNet-18's capacity
+- Overfitting gap suggests the 7500-sample train set is small relative to EfficientNet-B0's capacity
 - Tumor has highest precision (0.82) — model is confident when predicting tumor
 - Lymphocyte has best recall (0.81) — model rarely misses lymphocytes
 
 ---
 
-## Approach B: SimCLR → Frozen Encoder + Linear Head
+## Approach B: SupCon → Frozen Encoder + Linear Head
 
-### Architecture
-- Encoder: ResNet-18 (ImageNet pretrained) — projection head removed after pre-training
-- Projection head (pre-training only): MLP 512 → 256 → 128, L2-normalised output
-- Classifier head (fine-tuning): Linear 512 → 3, encoder frozen
+### Architecture (final: EfficientNet-B0)
+- Encoder: EfficientNet-B0 (ImageNet pretrained) — projection head removed after pre-training
+- Projection head (pre-training only): MLP 1280 → 256 → 128, L2-normalised output
+- Classifier head (fine-tuning): Linear 1280 → 3, encoder fully frozen
 
-### SimCLR Pre-training
-- Dataset: 59,763 contrastive patches (no labels used)
-- Loss: NT-Xent (Normalised Temperature-scaled Cross Entropy), τ=0.5
-- Two randomly augmented views per image; positive pair = same image
+### SupCon Pre-training
+- Dataset: 59,763 contrastive patches (labels used to define positives)
+- Loss: Supervised Contrastive Loss (Khosla et al., 2020), τ=0.07
+- Two randomly augmented views per image; positives = all same-class patches in batch
 - Augmentations: RandomResizedCrop(96), HorizontalFlip, ColorJitter(p=0.8), Grayscale(p=0.2), GaussianBlur(p=0.5)
 - Optimiser: Adam (lr=3e-4), CosineAnnealingLR scheduler
 - Batch size: 256, max 100 epochs, early stopping patience=10 on loss
 
 ### Linear Head Training
-- Only classifier layer trained (512 → 3), encoder fully frozen
+- Only classifier layer trained (1280 → 3), encoder fully frozen
 - Loss: CrossEntropy, Adam lr=1e-3 (higher LR appropriate for single linear layer)
 - Early stopping patience=7 on val_acc
 
@@ -182,24 +182,28 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 
 ---
 
-## Why SimCLR? Alternatives Considered
+## Contrastive Method Choice: SimCLR → SupCon
 
-### Why SimCLR
-SimCLR (Chen et al., 2020) was chosen as the contrastive pre-training strategy for several reasons:
-- **Simplicity:** No memory bank or momentum encoder required (unlike MoCo); trains end-to-end in one stage
-- **Strong performance:** Achieves competitive results with a simple NT-Xent loss and strong augmentation
-- **Large unlabelled set:** SimCLR benefits from large batches and large datasets — our 59k contrastive set is well-suited
-- **Well understood:** Extensive literature makes design choices (temperature, projection head size, augmentations) interpretable for the report
+### Initial choice: SimCLR
+SimCLR (Chen et al., 2020) was chosen initially:
+- **Simplicity:** No memory bank or momentum encoder required; trains end-to-end in one stage
+- **Large unlabelled set:** SimCLR benefits from large batches — our 59k contrastive set is well-suited
+- **Well understood:** Extensive literature makes design choices interpretable
+
+**SimCLR failed** — val=0.5995 (below random chance equivalent), silhouette=-0.0139. Cause: nuclei patches are visually very similar across classes; SimCLR's augmentation-based positives give the encoder no signal to distinguish them.
+
+### Why SupCon instead
+SupCon (Khosla et al., 2020) uses class labels to define positives — all same-class patches are pulled together in feature space. This directly addresses SimCLR's failure mode:
+- Encoder is explicitly trained to separate histiocyte, lymphocyte, and tumor representations
+- More positives per anchor (N_class × 2 views) vs SimCLR (just 1 positive per anchor)
+- Temperature τ=0.07 (vs 0.5 for SimCLR) creates sharper distributions and stronger gradients
 
 ### Alternatives considered
 | Method | Key idea | Why not chosen |
 |---|---|---|
-| **MoCo v2** | Momentum encoder + memory bank for large effective batch | More complex; memory bank adds implementation overhead |
-| **SupCon** (Supervised Contrastive) | Uses labels to define positives — same-class patches pulled together | Requires labels during pre-training, defeating the purpose of using unlabelled contrastive set |
-| **BYOL** | No negative pairs; uses bootstrap target network | No negatives means NT-Xent not needed, but more complex (stop-gradient, EMA) |
+| **MoCo v2** | Momentum encoder + memory bank for large effective batch | More complex; memory bank implementation overhead |
+| **BYOL** | No negative pairs; bootstrap target network | More complex (stop-gradient, EMA); no label supervision |
 | **DINO** | Self-distillation with Vision Transformers | ViT overkill for 100×100 patches; heavy compute |
-
-SimCLR hits the right balance of simplicity, interpretability, and effectiveness for this task.
 
 ### Relation to course tutorials
 The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Words + SVM, Lab 4: HOG + SVM). Our approaches extend this:
@@ -212,7 +216,7 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 
 ### Convergence behaviour
 - Early stopping consistently triggers at epoch 11–12 across all runs — the model genuinely saturates fast on 7500 samples
-- This is expected: ResNet-18 has ~11M parameters trained on only 7500 samples — the model has capacity to overfit quickly
+- This is expected: EfficientNet-B0 has ~5.3M parameters trained on only 7500 samples — the model has capacity to overfit quickly
 - Train acc reaches 0.89–0.90 while val acc plateaus at 0.73–0.75 — a ~15% generalisation gap indicates overfitting
 - **For the report:** This motivates Approach B — contrastive pre-training on 59k samples first should learn more generalisable features, reducing the overfitting gap when fine-tuning the head
 
@@ -257,13 +261,13 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 ---
 
 ### Validation Set Results
-| | Baseline | Approach A | Approach B |
+| | Baseline | Approach A (EfficientNet-B0) | Approach B (SupCon + EfficientNet-B0) |
 |---|---|---|---|
-| Trainable params | ~5M | ~11.2M | ~1.5K (head only) |
-| Val accuracy | 0.7083 | **0.7548** | 0.5995 |
-| Beats baseline? | — | ✓ (+4.7%) | ✗ (-10.9%) |
-| Train/val gap | — | ~15% (overfitting) | ~9% (underfitting) |
-| Silhouette score | — | N/A | -0.0139 (no separation) |
+| Trainable params | ~5M | ~5.3M | ~3.84K (head only) |
+| Val accuracy | 0.7083 | **0.7514** | 0.6714 |
+| Beats baseline? | — | ✓ (+4.3%) | ✗ (-3.7%) |
+| Train/val gap | — | ~15% (overfitting) | ~5% (underfitting) |
+| Silhouette score | — | N/A | -0.0190 (near-zero overlap) |
 
 ### Test Set Results — Final (Task2_Test_Set, 1858 patches: 458 histiocyte / 700 lymphocyte / 700 tumor)
 | | Baseline | Approach A (EfficientNet-B0) | Approach B (SupCon) |
@@ -300,7 +304,7 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 - Approach B below baseline is a valid and interesting result — it shows self-supervised contrastive learning is not always better, especially on domain-specific data with subtle inter-class differences
 - Primary vs metastatic origin: dataset contains both; worth checking if misclassifications cluster by slide origin
 - Why transfer learning from ImageNet works despite domain gap (natural images vs H&E stained histology)
-- Parameter count: Approach A ~11.2M > baseline ~5M; Approach B head only ~1.5K (encoder frozen)
+- Parameter count: Approach A ~5.3M ≈ baseline ~5M; Approach B head only ~3.84K (1280×3 linear, encoder frozen)
 
 ---
 
@@ -460,8 +464,9 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 
 ## Figures needed for report
 - [ ] Training curves — loss & accuracy vs epoch (Approach A) → `checkpoints_a/training_curves_a.png`
-- [ ] Training curves — loss & accuracy vs epoch (Approach B) → `checkpoints_b/training_curves_b.png`
-- [ ] SimCLR pre-training loss curve → add to pretrain_simclr.py
-- [ ] t-SNE of encoder features (Approach B) → `checkpoints_b/tsne_simclr.png`
+- [ ] Training curves — loss & accuracy vs epoch (Approach B, EfficientNet-B0) → `checkpoints_b_efficientnet_b0/training_curves_b_efficientnet_b0.png`
+- [ ] SupCon pre-training loss curve → `checkpoints_b_efficientnet_b0/supcon_pretrain_loss.png`
+- [ ] t-SNE of encoder features (Approach B, EfficientNet-B0) → `checkpoints_b_efficientnet_b0/tsne_efficientnet_b0.png`
 - [ ] Example patches per class (from dataset_exploration.ipynb)
-- [ ] Confusion matrix for both approaches
+- [ ] Confusion matrix — Approach A → `test_results/confusion_matrix_a.png`
+- [ ] Confusion matrix — Approach B → `test_results/confusion_matrix_b_efficientnet_b0.png`

@@ -1,10 +1,9 @@
 """
-Task 2 — Approach B (Step 2): Frozen Encoder + Linear Classifier
+Task 2 — Approach B (Step 2): Encoder + Linear Classifier
 
 Usage:
-  python train_approach_b.py --backbone resnet18
-  python train_approach_b.py --backbone resnet50
   python train_approach_b.py --backbone efficientnet_b0
+  python train_approach_b.py --backbone efficientnet_b0 --unfreeze   # unfreeze last block
 """
 
 import argparse
@@ -70,35 +69,48 @@ class NucleiDataset(Dataset):
         return img, label
 
 
-def load_encoder(backbone, ckpt_path):
+def load_encoder(backbone, ckpt_path, unfreeze=False):
     if backbone == "resnet18":
         m       = models.resnet18(weights=None)
         encoder = nn.Sequential(*list(m.children())[:-1])
         feat_dim = 512
+        # last block = layer4 (index 7)
+        unfreeze_modules = [list(encoder.children())[7]] if unfreeze else []
     elif backbone == "resnet50":
         m       = models.resnet50(weights=None)
         encoder = nn.Sequential(*list(m.children())[:-1])
         feat_dim = 2048
+        unfreeze_modules = [list(encoder.children())[7]] if unfreeze else []
     elif backbone == "efficientnet_b0":
         m       = models.efficientnet_b0(weights=None)
         encoder = nn.Sequential(m.features, nn.AdaptiveAvgPool2d(1))
         feat_dim = 1280
+        # features[7] = last MBConv block, features[8] = head conv (1x1 → 1280)
+        unfreeze_modules = [m.features[7], m.features[8]] if unfreeze else []
 
     encoder.load_state_dict(torch.load(ckpt_path, map_location=DEVICE))
+    # freeze everything first
     for p in encoder.parameters():
         p.requires_grad = False
+    # then selectively unfreeze
+    for mod in unfreeze_modules:
+        for p in mod.parameters():
+            p.requires_grad = True
+
+    n_frozen   = sum(1 for p in encoder.parameters() if not p.requires_grad)
+    n_unfrozen = sum(1 for p in encoder.parameters() if p.requires_grad)
+    print(f"  Encoder params — frozen: {n_frozen}, unfrozen: {n_unfrozen}")
     return encoder.to(DEVICE), feat_dim
 
 
-class FrozenEncoderClassifier(nn.Module):
+class EncoderClassifier(nn.Module):
     def __init__(self, encoder, feat_dim, num_classes):
         super().__init__()
         self.encoder    = encoder
         self.classifier = nn.Linear(feat_dim, num_classes)
 
     def forward(self, x):
-        with torch.no_grad():
-            f = self.encoder(x).flatten(1)
+        f = self.encoder(x).flatten(1)
         return self.classifier(f)
 
 
@@ -168,11 +180,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--backbone", default="resnet18",
                         choices=["resnet18", "resnet50", "efficientnet_b0"])
+    parser.add_argument("--unfreeze", action="store_true",
+                        help="Unfreeze last encoder block + head for fine-tuning")
     args = parser.parse_args()
 
-    ckpt_dir   = Path(__file__).parent / f"checkpoints_b_{args.backbone}"
-    encoder_ckpt = ckpt_dir / "supcon_encoder.pth"
-    print(f"Backbone: {args.backbone} | Checkpoint: {encoder_ckpt}")
+    run_suffix = "_unfrozen" if args.unfreeze else ""
+    ckpt_dir   = Path(__file__).parent / f"checkpoints_b_{args.backbone}{run_suffix}"
+    ckpt_dir.mkdir(exist_ok=True)
+    encoder_ckpt = Path(__file__).parent / f"checkpoints_b_{args.backbone}" / "supcon_encoder.pth"
+    print(f"Backbone: {args.backbone} | Unfreeze last block: {args.unfreeze}")
+    print(f"Encoder checkpoint: {encoder_ckpt}")
+    print(f"Output dir: {ckpt_dir}")
     print(f"Using device: {DEVICE}")
 
     with open(DATA_DIR / "class_names.json") as f:
@@ -188,10 +206,19 @@ def main():
         batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True
     )
 
-    encoder, feat_dim = load_encoder(args.backbone, encoder_ckpt)
-    model     = FrozenEncoderClassifier(encoder, feat_dim, NUM_CLASSES).to(DEVICE)
+    encoder, feat_dim = load_encoder(args.backbone, encoder_ckpt, unfreeze=args.unfreeze)
+    model     = EncoderClassifier(encoder, feat_dim, NUM_CLASSES).to(DEVICE)
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.classifier.parameters(), lr=LR)
+
+    if args.unfreeze:
+        # differential LRs: unfrozen encoder layers get 10x lower LR to avoid destroying SupCon features
+        encoder_params = [p for p in model.encoder.parameters() if p.requires_grad]
+        optimizer = torch.optim.Adam([
+            {"params": encoder_params,           "lr": LR * 0.01},
+            {"params": model.classifier.parameters(), "lr": LR},
+        ])
+    else:
+        optimizer = torch.optim.Adam(model.classifier.parameters(), lr=LR)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=4, factor=0.5)
 
     best_val_acc, epochs_no_impro = 0.0, 0
@@ -244,8 +271,9 @@ def main():
     feats, lbls = extract_features(encoder, val_loader)
     sil = silhouette_score(feats, lbls, sample_size=2000, random_state=42)
     print(f"Silhouette score: {sil:.4f}")
+    mode_label = "unfrozen last block" if args.unfreeze else "frozen encoder"
     plot_tsne(feats, lbls, class_names,
-              f"t-SNE — SupCon {args.backbone}",
+              f"t-SNE — SupCon {args.backbone} ({mode_label})",
               ckpt_dir / f"tsne_{args.backbone}.png")
 
 
