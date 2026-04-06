@@ -71,39 +71,34 @@ def load_model_a(num_classes):
 
 
 def load_model_b(backbone_name, num_classes):
-    ckpt_dir     = Path(__file__).parent / f"checkpoints_b_{backbone_name}"
-    encoder_ckpt = ckpt_dir / "supcon_encoder.pth"
-    model_ckpt   = ckpt_dir / "best_model_b.pth"
+    # backbone_name can be e.g. "efficientnet_b0" or "efficientnet_b0_unfrozen"
+    ckpt_dir   = Path(__file__).parent / f"checkpoints_b_{backbone_name}"
+    model_ckpt = ckpt_dir / "best_model_b.pth"
 
-    if backbone_name == "resnet18":
+    base = backbone_name.replace("_unfrozen", "").replace("_weighted", "")
+    if base == "resnet18":
         m = models.resnet18(weights=None)
         encoder = nn.Sequential(*list(m.children())[:-1])
         feat_dim = 512
-    elif backbone_name == "resnet50":
+    elif base == "resnet50":
         m = models.resnet50(weights=None)
         encoder = nn.Sequential(*list(m.children())[:-1])
         feat_dim = 2048
-    elif backbone_name == "efficientnet_b0":
+    elif base == "efficientnet_b0":
         m = models.efficientnet_b0(weights=None)
         encoder = nn.Sequential(m.features, nn.AdaptiveAvgPool2d(1))
         feat_dim = 1280
 
-    encoder.load_state_dict(torch.load(encoder_ckpt, map_location=DEVICE))
-    for p in encoder.parameters():
-        p.requires_grad = False
-
-    class FrozenEncoderClassifier(nn.Module):
+    class EncoderClassifier(nn.Module):
         def __init__(self):
             super().__init__()
             self.encoder    = encoder
             self.classifier = nn.Linear(feat_dim, num_classes)
 
         def forward(self, x):
-            with torch.no_grad():
-                f = self.encoder(x).flatten(1)
-            return self.classifier(f)
+            return self.classifier(self.encoder(x).flatten(1))
 
-    model = FrozenEncoderClassifier()
+    model = EncoderClassifier()
     model.load_state_dict(torch.load(model_ckpt, map_location=DEVICE))
     return model.to(DEVICE).eval()
 
@@ -145,7 +140,7 @@ def main():
     plot_confusion_matrix(preds_a, lbls, TARGET_CLASSES,
                           "Approach A — Test Set", OUTPUT_DIR / "confusion_matrix_a.png")
 
-    for backbone in ["resnet18", "resnet50", "efficientnet_b0"]:
+    for backbone in ["resnet18", "resnet50", "efficientnet_b0", "efficientnet_b0_unfrozen", "efficientnet_b0_unfrozen_weighted"]:
         ckpt = Path(__file__).parent / f"checkpoints_b_{backbone}" / "best_model_b.pth"
         if not ckpt.exists():
             print(f"\n── Approach B ({backbone}) — checkpoint not found, skipping ──")

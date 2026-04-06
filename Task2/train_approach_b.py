@@ -182,9 +182,11 @@ def main():
                         choices=["resnet18", "resnet50", "efficientnet_b0"])
     parser.add_argument("--unfreeze", action="store_true",
                         help="Unfreeze last encoder block + head for fine-tuning")
+    parser.add_argument("--weighted", action="store_true",
+                        help="Use weighted CrossEntropy (histiocyte=3.0) to handle class imbalance")
     args = parser.parse_args()
 
-    run_suffix = "_unfrozen" if args.unfreeze else ""
+    run_suffix = ("_unfrozen" if args.unfreeze else "") + ("_weighted" if args.weighted else "")
     ckpt_dir   = Path(__file__).parent / f"checkpoints_b_{args.backbone}{run_suffix}"
     ckpt_dir.mkdir(exist_ok=True)
     encoder_ckpt = Path(__file__).parent / f"checkpoints_b_{args.backbone}" / "supcon_encoder.pth"
@@ -208,7 +210,14 @@ def main():
 
     encoder, feat_dim = load_encoder(args.backbone, encoder_ckpt, unfreeze=args.unfreeze)
     model     = EncoderClassifier(encoder, feat_dim, NUM_CLASSES).to(DEVICE)
-    criterion = nn.CrossEntropyLoss()
+
+    if args.weighted:
+        # histiocyte=3.0 to compensate for imbalance in test set (458 vs 700)
+        class_weights = torch.tensor([3.0, 1.0, 1.0]).to(DEVICE)
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
+        print("  Using weighted CrossEntropy (histiocyte=3.0)")
+    else:
+        criterion = nn.CrossEntropyLoss()
 
     if args.unfreeze:
         # differential LRs: unfrozen encoder layers get 10x lower LR to avoid destroying SupCon features
