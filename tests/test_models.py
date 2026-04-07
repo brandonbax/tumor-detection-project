@@ -19,6 +19,7 @@ from task1.models import (
     ConvBlock,
     DownBlock,
     UpBlock,
+    ASPP,
     UNet,
     AEEncoder,
     AEDecoder,
@@ -109,6 +110,34 @@ class TestUpBlock:
         skip = torch.randn(BATCH, 64, 31, 31)
         out = block(x, skip)
         assert out.shape == (BATCH, 64, 31, 31)
+
+
+class TestASPP:
+
+    def test_output_shape(self):
+        aspp = ASPP(512, 512)
+        x = torch.randn(BATCH, 512, 8, 8)
+        out = aspp(x)
+        assert out.shape == (BATCH, 512, 8, 8)
+
+    def test_different_channels(self):
+        aspp = ASPP(256, 128)
+        x = torch.randn(BATCH, 256, 16, 16)
+        out = aspp(x)
+        assert out.shape == (BATCH, 128, 16, 16)
+
+    def test_custom_rates(self):
+        aspp = ASPP(64, 64, rates=(3, 6, 9))
+        x = torch.randn(1, 64, 32, 32)
+        out = aspp(x)
+        assert out.shape == (1, 64, 32, 32)
+
+    def test_small_spatial(self):
+        """ASPP should work even on very small feature maps."""
+        aspp = ASPP(512, 512)
+        x = torch.randn(1, 512, 4, 4)
+        out = aspp(x)
+        assert out.shape == (1, 512, 4, 4)
 
 
 # ═══════════════════════════════════════════════

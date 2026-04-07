@@ -75,6 +75,66 @@ class UpBlock(nn.Module):
         return self.conv(x)
 
 
+class ASPP(nn.Module):
+    """Atrous Spatial Pyramid Pooling.
+
+    Applies parallel dilated convolutions at multiple rates plus global
+    average pooling, then fuses the results with a 1x1 projection.
+    Placed at the encoder bottleneck to capture multi-scale context.
+    """
+
+    def __init__(self, in_ch: int, out_ch: int,
+                 rates: tuple = (6, 12, 18)):
+        super().__init__()
+
+        # 1x1 convolution branch
+        self.conv1x1 = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, 1, bias=False),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+        )
+
+        # Dilated convolution branches
+        self.atrous_convs = nn.ModuleList()
+        for rate in rates:
+            self.atrous_convs.append(nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 3, padding=rate,
+                          dilation=rate, bias=False),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+            ))
+
+        # Global average pooling branch (no BN after pooling to 1x1
+        # to avoid BatchNorm errors with single-element spatial dims)
+        self.gap_pool = nn.AdaptiveAvgPool2d(1)
+        self.gap_conv = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, 1, bias=True),
+            nn.ReLU(inplace=True),
+        )
+
+        # Fuse all branches: 1x1 + len(rates) dilated + GAP
+        num_branches = 1 + len(rates) + 1
+        self.project = nn.Sequential(
+            nn.Conv2d(out_ch * num_branches, out_ch, 1, bias=False),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x):
+        h, w = x.shape[2], x.shape[3]
+
+        branches = [self.conv1x1(x)]
+        for atrous in self.atrous_convs:
+            branches.append(atrous(x))
+        # GAP branch — upsample back to input spatial size
+        gap = self.gap_conv(self.gap_pool(x))
+        gap = F.interpolate(gap, size=(h, w), mode="bilinear",
+                            align_corners=True)
+        branches.append(gap)
+
+        return self.project(torch.cat(branches, dim=1))
+
+
 # ═══════════════════════════════════════════════
 #  1.  UNet
 # ═══════════════════════════════════════════════
@@ -109,6 +169,9 @@ class UNet(nn.Module):
         for i in range(len(features) - 1):
             self.encoders.append(DownBlock(features[i], features[i + 1]))
 
+        # ASPP at the bottleneck for multi-scale context
+        self.aspp = ASPP(features[-1], features[-1])
+
         # Decoder (upsampling)
         self.decoders = nn.ModuleList()
         for i in range(len(features) - 1, 0, -1):
@@ -131,6 +194,9 @@ class UNet(nn.Module):
 
         # Remove bottleneck from skips (it's our starting point for decoder)
         skips = skips[:-1]
+
+        # Multi-scale context at the bottleneck
+        x = self.aspp(x)
 
         # Decoder path
         for dec, skip in zip(self.decoders, reversed(skips)):
