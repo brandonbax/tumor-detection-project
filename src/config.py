@@ -34,7 +34,7 @@ CLASS_NAME_TO_ID = {
 #  Training Parameters
 # ═══════════════════════════════════════════════
 PATCH_SIZE = 256
-NUM_WORKERS = 4
+NUM_WORKERS = 2
 
 NUM_CLASSES = 3
 CLASS_NAMES = ['Other', 'Tumor', 'Stroma']
@@ -44,7 +44,7 @@ SEED = 42
 CHECKPOINT_DIR = os.path.join("src", "task1", "checkpoints")
 RESULTS_DIR = os.path.join("src", "task1", "results")
 
-UNET_EPOCHS = 50
+UNET_EPOCHS = 80
 UNET_BATCH_SIZE = 16
 UNET_LR = 1e-4
 UNET_WEIGHT_DECAY = 1e-4
@@ -56,15 +56,15 @@ AE_LR = 1e-3
 AE_WEIGHT_DECAY = 1e-4
 AE_FEATURES = [64, 128, 256, 512, 1024]
 
-AE_SEG_EPOCHS = 50
+AE_SEG_EPOCHS = 80
 AE_SEG_BATCH_SIZE = 8
 AE_SEG_LR = 1e-4
 AE_SEG_WEIGHT_DECAY = 1e-4
 
 LR_MIN = 1e-6
 
-LAMBDA_DICE = 0.5
-LAMBDA_CE = 0.5
+LAMBDA_DICE = 0.7
+LAMBDA_CE = 0.3
 
 # ═══════════════════════════════════════════════
 #  Evaluation Baseline
