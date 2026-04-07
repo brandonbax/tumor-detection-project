@@ -34,6 +34,8 @@ def parse_args():
                     default=config.AE_FEATURES)
     p.add_argument("--data_root", type=str, default=config.DATASET_ROOT)
     p.add_argument("--use_class_weights", action="store_true")
+    p.add_argument("--dampen_weights", action="store_true",
+                    help="Use sqrt-dampened weights for softer rebalancing")
     p.add_argument("--lambda_dice", type=float, default=config.LAMBDA_DICE)
     p.add_argument("--lambda_ce", type=float, default=config.LAMBDA_CE)
     p.add_argument("--checkpoint_dir", type=str, default=config.CHECKPOINT_DIR)
@@ -113,6 +115,7 @@ def main():
     print(f"  Lambda Dice     : {args.lambda_dice}")
     print(f"  Lambda CE       : {args.lambda_ce}")
     print(f"  Class weights   : {args.use_class_weights}")
+    print(f"  Dampen weights  : {args.dampen_weights}")
     print(f"  AE checkpoint   : {args.ae_checkpoint}")
     print(f"  Seed            : {args.seed}")
     print(f"{'=' * 55}\n")
@@ -155,7 +158,8 @@ def main():
         train_ds = TissueSegmentationDataset(
             config.TRAIN_IMAGE_DIR, config.TRAIN_LABEL_DIR,
             patch_size=args.patch_size, is_train=False)
-        ce_weight = compute_class_weights(train_ds).to(device)
+        ce_weight = compute_class_weights(train_ds,
+                                          dampen=args.dampen_weights).to(device)
         print(f"  Class weights: {ce_weight.tolist()}")
 
     # ── Loss / optimiser / scheduler ─────────

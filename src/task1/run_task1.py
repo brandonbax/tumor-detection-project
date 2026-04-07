@@ -29,6 +29,8 @@ def main():
     p.add_argument("--ae_seg_batch_size", type=int, default=config.AE_SEG_BATCH_SIZE)
     p.add_argument("--use_class_weights", action="store_true",
                     help="Use inverse‑frequency class weights for CE loss")
+    p.add_argument("--dampen_weights", action="store_true",
+                    help="Use sqrt-dampened weights for softer rebalancing")
     p.add_argument("--lambda_dice", type=float, default=config.LAMBDA_DICE)
     p.add_argument("--lambda_ce", type=float, default=config.LAMBDA_CE)
     p.add_argument("--skip_unet", action="store_true")
@@ -38,6 +40,7 @@ def main():
     args = p.parse_args()
 
     cw_flag = "--use_class_weights" if args.use_class_weights else ""
+    dw_flag = "--dampen_weights" if args.dampen_weights else ""
     loss_flags = f"--lambda_dice {args.lambda_dice} --lambda_ce {args.lambda_ce}"
     python = sys.executable
 
@@ -48,7 +51,7 @@ def main():
             f"--epochs {args.unet_epochs} "
             f"--batch_size {args.unet_batch_size} "
             f"--patch_size {args.patch_size} "
-            f"{cw_flag} {loss_flags}")
+            f"{cw_flag} {dw_flag} {loss_flags}")
 
     # ── Step 2: Autoencoder pre‑training ─────
     if not args.skip_ae:
@@ -65,7 +68,7 @@ def main():
             f"--epochs {args.ae_seg_epochs} "
             f"--batch_size {args.ae_seg_batch_size} "
             f"--patch_size {args.patch_size} "
-            f"{cw_flag} {loss_flags}")
+            f"{cw_flag} {dw_flag} {loss_flags}")
 
     # ── Step 4: Evaluate ─────────────────────
     if not args.skip_eval:

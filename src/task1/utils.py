@@ -10,6 +10,7 @@ import seaborn as sns
 
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 
 import torchmetrics
 from torchmetrics.classification import (
@@ -237,9 +238,17 @@ def get_criterion(weight: Optional[torch.Tensor] = None,
 
 def compute_class_weights(dataset,
                           num_classes: int = config.NUM_CLASSES,
-                          max_samples: int = 100) -> torch.Tensor:
+                          max_samples: int = 100,
+                          dampen: bool = False) -> torch.Tensor:
     """
     Estimate inverse-frequency class weights from a subset of the dataset.
+
+    Parameters
+    ----------
+    dampen : bool
+        If True, use 1/sqrt(count) instead of 1/count for softer
+        rebalancing that helps rare classes without crippling
+        dominant ones.
     """
     counts = np.zeros(num_classes, dtype=np.float64)
     n = min(len(dataset), max_samples)
@@ -250,7 +259,10 @@ def compute_class_weights(dataset,
         for c in range(num_classes):
             counts[c] += (mask == c).sum()
     counts = np.maximum(counts, 1.0)
-    weights = 1.0 / counts
+    if dampen:
+        weights = 1.0 / np.sqrt(counts)
+    else:
+        weights = 1.0 / counts
     weights = weights / weights.sum() * num_classes
     return torch.tensor(weights, dtype=torch.float32)
 
@@ -401,3 +413,137 @@ def save_reconstruction_grid(originals: torch.Tensor,
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"Saved reconstruction grid → {save_path}")
+
+
+def save_class_distribution(dataset,
+                            save_path: str,
+                            num_classes: int = config.NUM_CLASSES,
+                            class_names: List[str] = None):
+    """
+    Compute and plot the pixel-level class distribution of a dataset.
+
+    Produces a bar chart showing the percentage of pixels per class,
+    useful for illustrating class imbalance.
+    """
+    if class_names is None:
+        class_names = config.CLASS_NAMES
+
+    counts = np.zeros(num_classes, dtype=np.float64)
+    for i in tqdm(range(len(dataset)), desc="  Class distribution"):
+        _, mask = dataset[i]
+        if isinstance(mask, torch.Tensor):
+            mask = mask.numpy()
+        for c in range(num_classes):
+            counts[c] += (mask == c).sum()
+
+    total = counts.sum()
+    percentages = counts / total * 100
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    bars = ax.bar(class_names, percentages, color=[
+        f"#{PALETTE[i][0]:02x}{PALETTE[i][1]:02x}{PALETTE[i][2]:02x}"
+        for i in range(num_classes)
+    ])
+    for bar, pct, cnt in zip(bars, percentages, counts):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+                f"{pct:.1f}%\n({int(cnt):,} px)",
+                ha="center", va="bottom", fontsize=10)
+    ax.set_ylabel("Percentage of Pixels")
+    ax.set_title("Class Distribution (Training Set)")
+    ax.set_ylim(0, max(percentages) * 1.25)
+    ax.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved class distribution → {save_path}")
+
+    return {name: float(pct) for name, pct in zip(class_names, percentages)}
+
+
+def save_model_comparison_grid(images: torch.Tensor,
+                               masks_true: torch.Tensor,
+                               model_preds: Dict[str, torch.Tensor],
+                               save_path: str,
+                               num_samples: int = 4):
+    """
+    Save a side-by-side grid: Image | Ground Truth | Model1 | Model2 | ...
+
+    Parameters
+    ----------
+    images      : (B, 3, H, W) normalised image tensors
+    masks_true  : (B, H, W) ground-truth masks
+    model_preds : dict mapping model name to (B, H, W) predicted masks
+    """
+    n = min(num_samples, images.size(0))
+    model_names = list(model_preds.keys())
+    ncols = 2 + len(model_names)  # image + gt + each model
+
+    fig, axes = plt.subplots(n, ncols, figsize=(4 * ncols, 4 * n))
+    if n == 1:
+        axes = axes[None, :]
+
+    for i in range(n):
+        img = denormalize(images[i])
+        gt = mask_to_rgb(masks_true[i].cpu().numpy())
+
+        axes[i, 0].imshow(img)
+        axes[i, 0].set_title("Image")
+        axes[i, 0].axis("off")
+
+        axes[i, 1].imshow(gt)
+        axes[i, 1].set_title("Ground Truth")
+        axes[i, 1].axis("off")
+
+        for j, name in enumerate(model_names):
+            pred = mask_to_rgb(model_preds[name][i].cpu().numpy())
+            axes[i, 2 + j].imshow(pred)
+            axes[i, 2 + j].set_title(name)
+            axes[i, 2 + j].axis("off")
+
+    plt.tight_layout()
+    os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved model comparison grid → {save_path}")
+
+
+def save_metrics_comparison_chart(all_results: Dict[str, Dict],
+                                  save_path: str,
+                                  class_names: List[str] = None):
+    """
+    Save a grouped bar chart comparing Dice and IoU per class across models.
+    """
+    if class_names is None:
+        class_names = config.CLASS_NAMES
+
+    model_names = list(all_results.keys())
+    n_models = len(model_names)
+    n_classes = len(class_names)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    x = np.arange(n_classes)
+    width = 0.8 / n_models
+
+    for idx, name in enumerate(model_names):
+        res = all_results[name]
+        dice_vals = [res.get(f"dice_{cn}", 0) for cn in class_names]
+        iou_vals = [res.get(f"iou_{cn}", 0) for cn in class_names]
+
+        offset = (idx - (n_models - 1) / 2) * width
+        ax1.bar(x + offset, dice_vals, width, label=name)
+        ax2.bar(x + offset, iou_vals, width, label=name)
+
+    for ax, title in [(ax1, "Dice per Class"), (ax2, "IoU per Class")]:
+        ax.set_xticks(x)
+        ax.set_xticklabels(class_names)
+        ax.set_ylim(0, 1.0)
+        ax.set_title(title)
+        ax.legend()
+        ax.grid(axis="y", alpha=0.3)
+
+    plt.tight_layout()
+    os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved metrics comparison chart → {save_path}")
