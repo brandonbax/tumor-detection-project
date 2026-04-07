@@ -76,7 +76,7 @@ def load_model_b(backbone_name, num_classes):
     ckpt_dir   = Path(__file__).parent / f"checkpoints_b_{backbone_name}"
     model_ckpt = ckpt_dir / "best_model_b.pth"
 
-    base = backbone_name.replace("_unfrozen", "").replace("_weighted", "")
+    base = backbone_name.replace("_unfrozen_all", "").replace("_unfrozen", "").replace("_weighted", "")
     if base == "resnet18":
         m = models.resnet18(weights=None)
         encoder = nn.Sequential(*list(m.children())[:-1])
