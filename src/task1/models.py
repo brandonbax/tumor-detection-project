@@ -6,21 +6,35 @@ import config
 
 
 class ConvBlock(nn.Module):
-    """Two consecutive conv -> BN -> ReLU layers."""
+    """Residual block: two conv -> BN -> ReLU layers with a shortcut connection.
+
+    When in_ch != out_ch a 1x1 convolution projects the input to match,
+    otherwise the shortcut is an identity mapping.
+    """
 
     def __init__(self, in_ch: int, out_ch: int):
         super().__init__()
-        self.block = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(out_ch),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(out_ch),
-            nn.ReLU(inplace=True),
-        )
+        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_ch)
+        self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_ch)
+        self.relu = nn.ReLU(inplace=True)
+
+        # 1x1 projection shortcut when channel dimensions differ
+        if in_ch != out_ch:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 1, bias=False),
+                nn.BatchNorm2d(out_ch),
+            )
+        else:
+            self.shortcut = nn.Identity()
 
     def forward(self, x):
-        return self.block(x)
+        identity = self.shortcut(x)
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out = self.relu(out + identity)
+        return out
 
 
 class DownBlock(nn.Module):
