@@ -1,0 +1,39 @@
+{
+  "UNet": {
+    "pixel_accuracy": 0.7951889038085938,
+    "mean_dice": 0.5845791697502136,
+    "mean_iou": 0.4893871247768402,
+    "dice_Other": 0.3013775944709778,
+    "iou_Other": 0.20165318250656128,
+    "precision_Other": 0.37216103076934814,
+    "recall_Other": 0.25907859206199646,
+    "dice_Tumor": 0.8355147838592529,
+    "iou_Tumor": 0.7691031098365784,
+    "precision_Tumor": 0.8974835276603699,
+    "recall_Tumor": 0.8555153608322144,
+    "dice_Stroma": 0.6168451905250549,
+    "iou_Stroma": 0.4974049925804138,
+    "precision_Stroma": 0.535381019115448,
+    "recall_Stroma": 0.6920063495635986,
+    "trainable_params": 69322036
+  },
+  "AE-Seg": {
+    "pixel_accuracy": 0.6512340307235718,
+    "mean_dice": 0.42212000489234924,
+    "mean_iou": 0.33517977595329285,
+    "dice_Other": 0.07519042491912842,
+    "iou_Other": 0.042513616383075714,
+    "precision_Other": 0.1091262623667717,
+    "recall_Other": 0.02374248206615448,
+    "dice_Tumor": 0.690244734287262,
+    "iou_Tumor": 0.5869410634040833,
+    "precision_Tumor": 0.8786802887916565,
+    "recall_Tumor": 0.6772735118865967,
+    "dice_Stroma": 0.5009249448776245,
+    "iou_Stroma": 0.37608465552330017,
+    "precision_Stroma": 0.3252548575401306,
+    "recall_Stroma": 0.7237271070480347,
+    "trainable_params_decoder": 14111540,
+    "total_params": 33659188
+  }
+}
