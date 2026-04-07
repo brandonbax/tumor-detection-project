@@ -127,10 +127,10 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 | nuclei_lymphocyte | 0.6008 | 0.6771 | 0.6367 |
 | nuclei_tumor | 0.6784 | 0.7443 | 0.7098 |
 
-### EfficientNet-B0 + SupCon ✓ Best
+### EfficientNet-B0 + SupCon (frozen encoder)
 | Metric | Val | Test |
 |---|---|---|
-| Overall accuracy | **0.6714** | TBD |
+| Overall accuracy | 0.6714 | TBD |
 | Silhouette score | -0.0190 | — |
 | Early stopping at epoch | 15 | — |
 
@@ -140,14 +140,34 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 | nuclei_lymphocyte | 0.6104 | 0.7229 | 0.6619 |
 | nuclei_tumor | 0.7292 | 0.7771 | 0.7524 |
 
-### Backbone comparison summary (val accuracy)
-| Backbone | Val Acc | Silhouette |
+### EfficientNet-B0 + SupCon (unfrozen last block) ✓ Best Approach B
+| Metric | Val | Test |
 |---|---|---|
-| ResNet-18 | 0.6443 | -0.0270 |
-| ResNet-50 | 0.6510 | -0.0348 |
-| **EfficientNet-B0** | **0.6714** | **-0.0190** |
+| Overall accuracy | **0.6890** | TBD |
+| Silhouette score | -0.0141 | — |
+| Early stopping at epoch | 21 | — |
 
-**Winner: EfficientNet-B0** — best val accuracy AND best silhouette score (least negative). Also matches Approach A backbone for fair comparison.
+| Class | Precision | Recall | F1 |
+|---|---|---|---|
+| nuclei_histiocyte | 0.7187 | 0.5329 | 0.6120 |
+| nuclei_lymphocyte | 0.6394 | 0.7700 | 0.6986 |
+| nuclei_tumor | 0.7249 | 0.7643 | 0.7441 |
+
+- Unfreezing `features[7]` + `features[8]` (last MBConv block + head conv) with differential LR (encoder: 1e-5, head: 1e-3)
+- +1.76% over frozen variant; silhouette improves from -0.0190 → -0.0141
+
+### Backbone + freeze ablation summary
+| Backbone | Freeze | Val Acc | Test Acc | Silhouette |
+|---|---|---|---|---|
+| ResNet-18 | frozen | 0.6443 | 0.6416 | -0.0270 |
+| ResNet-50 | frozen | 0.6510 | 0.6351 | -0.0348 |
+| EfficientNet-B0 | frozen | 0.6714 | 0.6642 | -0.0190 |
+| **EfficientNet-B0** | **last block unfrozen** | **0.6890** | **0.6755** | **-0.0141** |
+| EfficientNet-B0 | unfrozen + weighted | 0.6857 | 0.6561 | -0.0156 |
+
+**Winner: EfficientNet-B0 with last block unfrozen** — best val and test accuracy, best silhouette.
+
+**Weighted loss hurt Approach B** (test 0.6755 → 0.6561): boosted histiocyte recall (0.53→0.70) but collapsed lymphocyte recall (0.67→0.52) — the contrastive encoder represents histiocyte and lymphocyte in overlapping space, so pushing histiocyte up pulls lymphocyte predictions down. Unlike Approach A where the full encoder can compensate, the partially frozen encoder cannot rebalance.
 
 ---
 
@@ -261,21 +281,21 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 ---
 
 ### Validation Set Results
-| | Baseline | Approach A (EfficientNet-B0) | Approach B (SupCon + EfficientNet-B0) |
+| | Baseline | Approach A (EfficientNet-B0) | Approach B best (EfficientNet-B0 unfrozen) |
 |---|---|---|---|
-| Trainable params | ~5M | ~5.3M | ~3.84K (head only) |
-| Val accuracy | 0.7083 | **0.7514** | 0.6714 |
-| Beats baseline? | — | ✓ (+4.3%) | ✗ (-3.7%) |
-| Train/val gap | — | ~15% (overfitting) | ~5% (underfitting) |
-| Silhouette score | — | N/A | -0.0190 (near-zero overlap) |
+| Trainable params | ~5M | ~5.3M | ~1.5M (last block + head) |
+| Val accuracy | 0.7083 | **0.7514** | 0.6890 |
+| Test accuracy | 0.7083 | **0.7411** | 0.6755 |
+| Beats baseline? | — | ✓ (+3.3% test) | ✗ (-3.3% test) |
+| Silhouette score | — | N/A | -0.0141 |
 
 ### Test Set Results — Final (Task2_Test_Set, 1858 patches: 458 histiocyte / 700 lymphocyte / 700 tumor)
-| | Baseline | Approach A (EfficientNet-B0) | Approach B (SupCon) |
+| | Baseline | Approach A (EfficientNet-B0) | Approach B best (EfficientNet-B0 unfrozen) |
 |---|---|---|---|
-| Overall accuracy | 0.7083 | **0.7411** | 0.6416 |
-| Beats baseline? | — | ✓ (+3.3%) | ✗ (-6.7%) |
+| Overall accuracy | 0.7083 | **0.7411** | 0.6755 |
+| Beats baseline? | — | ✓ (+3.3%) | ✗ (-3.3%) |
 
-#### Approach A — Per-class (test set, final)
+#### Approach A — Per-class (test set)
 | Class | Precision | Recall | F1 | Support |
 |---|---|---|---|---|
 | nuclei_histiocyte | 0.5916 | 0.7052 | 0.6434 | 458 |
@@ -283,13 +303,13 @@ The course labs covered classical feature-based methods (Lab 3: SIFT + Bag of Wo
 | nuclei_tumor | 0.7863 | 0.8357 | 0.8102 | 700 |
 | **Overall** | 0.7531 | **0.7411** | 0.7426 | 1858 |
 
-#### Approach B — Per-class (test set, final)
+#### Approach B best (EfficientNet-B0 unfrozen) — Per-class (test set)
 | Class | Precision | Recall | F1 | Support |
 |---|---|---|---|---|
-| nuclei_histiocyte | 0.4659 | 0.3581 | 0.4049 | 458 |
-| nuclei_lymphocyte | 0.7032 | 0.6600 | 0.6809 | 700 |
-| nuclei_tumor | 0.6667 | 0.8086 | 0.7308 | 700 |
-| **Overall** | 0.6309 | **0.6416** | 0.6317 | 1858 |
+| nuclei_histiocyte | 0.5139 | 0.5262 | 0.5200 | 458 |
+| nuclei_lymphocyte | 0.7386 | 0.6700 | 0.7026 | 700 |
+| nuclei_tumor | 0.7228 | 0.7786 | 0.7497 | 700 |
+| **Overall** | 0.6772 | **0.6755** | 0.6753 | 1858 |
 
 ### Val vs Test gap
 - Val balanced (700/700/700); test imbalanced (458/700/700)

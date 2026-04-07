@@ -104,10 +104,21 @@ def load_model_b(backbone_name, num_classes):
 
 
 @torch.no_grad()
-def run_inference(model, loader):
+def run_inference(model, loader, tta=False):
+    """Run inference, optionally with test-time augmentation (TTA).
+    TTA averages softmax probabilities over 4 views: original + hflip + vflip + both.
+    """
     all_preds, all_labels = [], []
     for imgs, labels in loader:
-        preds = model(imgs.to(DEVICE)).argmax(1).cpu().numpy()
+        imgs = imgs.to(DEVICE)
+        if tta:
+            logits  = model(imgs)
+            logits += model(torch.flip(imgs, [3]))           # horizontal flip
+            logits += model(torch.flip(imgs, [2]))           # vertical flip
+            logits += model(torch.flip(imgs, [2, 3]))        # both
+            preds   = logits.argmax(1).cpu().numpy()
+        else:
+            preds = model(imgs).argmax(1).cpu().numpy()
         all_preds.extend(preds)
         all_labels.extend(labels.numpy())
     return np.array(all_preds), np.array(all_labels)
@@ -127,31 +138,42 @@ def plot_confusion_matrix(preds, labels, class_names, title, save_path):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--tta", action="store_true", help="Enable test-time augmentation")
+    args = parser.parse_args()
+
     class_to_idx = {cls: i for i, cls in enumerate(TARGET_CLASSES)}
     loader = DataLoader(
         TestSetDataset(TEST_DIR, class_to_idx, val_transforms),
         batch_size=64, shuffle=False, num_workers=2, pin_memory=True
     )
+    tta_suffix = "_tta" if args.tta else ""
+    if args.tta:
+        print("Test-time augmentation enabled (4 views: orig + hflip + vflip + both)")
 
     print("\n── Approach A (EfficientNet-B0, weighted loss) ──")
-    preds_a, lbls = run_inference(load_model_a(len(TARGET_CLASSES)), loader)
+    preds_a, lbls = run_inference(load_model_a(len(TARGET_CLASSES)), loader, tta=args.tta)
     print(classification_report(lbls, preds_a, target_names=TARGET_CLASSES, digits=4))
     print(f"Overall accuracy: {accuracy_score(lbls, preds_a):.4f}")
     plot_confusion_matrix(preds_a, lbls, TARGET_CLASSES,
-                          "Approach A — Test Set", OUTPUT_DIR / "confusion_matrix_a.png")
+                          f"Approach A — Test Set{' (TTA)' if args.tta else ''}",
+                          OUTPUT_DIR / f"confusion_matrix_a{tta_suffix}.png")
 
-    for backbone in ["resnet18", "resnet50", "efficientnet_b0", "efficientnet_b0_unfrozen", "efficientnet_b0_unfrozen_weighted"]:
+    for backbone in ["resnet18", "resnet50", "efficientnet_b0",
+                     "efficientnet_b0_unfrozen", "efficientnet_b0_unfrozen_weighted",
+                     "efficientnet_b0_unfrozen_all"]:
         ckpt = Path(__file__).parent / f"checkpoints_b_{backbone}" / "best_model_b.pth"
         if not ckpt.exists():
             print(f"\n── Approach B ({backbone}) — checkpoint not found, skipping ──")
             continue
-        print(f"\n── Approach B SupCon ({backbone}) ──")
-        preds_b, _ = run_inference(load_model_b(backbone, len(TARGET_CLASSES)), loader)
+        print(f"\n── Approach B SupCon ({backbone}){' + TTA' if args.tta else ''} ──")
+        preds_b, _ = run_inference(load_model_b(backbone, len(TARGET_CLASSES)), loader, tta=args.tta)
         print(classification_report(lbls, preds_b, target_names=TARGET_CLASSES, digits=4))
         print(f"Overall accuracy: {accuracy_score(lbls, preds_b):.4f}")
         plot_confusion_matrix(preds_b, lbls, TARGET_CLASSES,
-                              f"Approach B {backbone} — Test Set",
-                              OUTPUT_DIR / f"confusion_matrix_b_{backbone}.png")
+                              f"Approach B {backbone}{' (TTA)' if args.tta else ''} — Test Set",
+                              OUTPUT_DIR / f"confusion_matrix_b_{backbone}{tta_suffix}.png")
 
 
 if __name__ == "__main__":

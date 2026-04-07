@@ -182,15 +182,17 @@ def main():
                         choices=["resnet18", "resnet50", "efficientnet_b0"])
     parser.add_argument("--unfreeze", action="store_true",
                         help="Unfreeze last encoder block + head for fine-tuning")
+    parser.add_argument("--unfreeze_all", action="store_true",
+                        help="Unfreeze ALL encoder layers (full fine-tune from SupCon init)")
     parser.add_argument("--weighted", action="store_true",
                         help="Use weighted CrossEntropy (histiocyte=3.0) to handle class imbalance")
     args = parser.parse_args()
 
-    run_suffix = ("_unfrozen" if args.unfreeze else "") + ("_weighted" if args.weighted else "")
+    run_suffix = ("_unfrozen_all" if args.unfreeze_all else "_unfrozen" if args.unfreeze else "") + ("_weighted" if args.weighted else "")
     ckpt_dir   = Path(__file__).parent / f"checkpoints_b_{args.backbone}{run_suffix}"
     ckpt_dir.mkdir(exist_ok=True)
     encoder_ckpt = Path(__file__).parent / f"checkpoints_b_{args.backbone}" / "supcon_encoder.pth"
-    print(f"Backbone: {args.backbone} | Unfreeze last block: {args.unfreeze}")
+    print(f"Backbone: {args.backbone} | Unfreeze: {'all' if args.unfreeze_all else 'last block' if args.unfreeze else 'none (frozen)'}")
     print(f"Encoder checkpoint: {encoder_ckpt}")
     print(f"Output dir: {ckpt_dir}")
     print(f"Using device: {DEVICE}")
@@ -209,21 +211,34 @@ def main():
     )
 
     encoder, feat_dim = load_encoder(args.backbone, encoder_ckpt, unfreeze=args.unfreeze)
+
+    # --unfreeze_all: unfreeze everything at very low LR (SupCon init → full fine-tune)
+    if args.unfreeze_all:
+        for p in encoder.parameters():
+            p.requires_grad = True
+        n_unfrozen = sum(p.numel() for p in encoder.parameters())
+        print(f"  Full encoder unfreeze: {n_unfrozen:,} params trainable")
+
     model     = EncoderClassifier(encoder, feat_dim, NUM_CLASSES).to(DEVICE)
 
     if args.weighted:
-        # histiocyte=3.0 to compensate for imbalance in test set (458 vs 700)
         class_weights = torch.tensor([3.0, 1.0, 1.0]).to(DEVICE)
         criterion = nn.CrossEntropyLoss(weight=class_weights)
         print("  Using weighted CrossEntropy (histiocyte=3.0)")
     else:
         criterion = nn.CrossEntropyLoss()
 
-    if args.unfreeze:
-        # differential LRs: unfrozen encoder layers get 10x lower LR to avoid destroying SupCon features
+    if args.unfreeze_all:
+        # Very low LR for encoder to preserve SupCon representations
+        encoder_params = list(model.encoder.parameters())
+        optimizer = torch.optim.Adam([
+            {"params": encoder_params,                "lr": LR * 0.001},
+            {"params": model.classifier.parameters(), "lr": LR},
+        ])
+    elif args.unfreeze:
         encoder_params = [p for p in model.encoder.parameters() if p.requires_grad]
         optimizer = torch.optim.Adam([
-            {"params": encoder_params,           "lr": LR * 0.01},
+            {"params": encoder_params,                "lr": LR * 0.01},
             {"params": model.classifier.parameters(), "lr": LR},
         ])
     else:
