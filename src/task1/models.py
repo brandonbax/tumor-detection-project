@@ -50,11 +50,56 @@ class DownBlock(nn.Module):
         return self.conv(x)
 
 
+class AttentionGate(nn.Module):
+    """Attention gate that reweights encoder skip features using the
+    decoder gating signal (Oktay et al., 2018).
+
+    Produces a soft spatial attention map via additive attention:
+        psi = sigmoid(W_psi( ReLU( W_g(g) + W_x(x) ) ))
+        output = x * psi
+    """
+
+    def __init__(self, gate_ch: int, skip_ch: int, inter_ch: int = None):
+        super().__init__()
+        if inter_ch is None:
+            inter_ch = skip_ch // 2 or 1
+
+        self.W_g = nn.Sequential(
+            nn.Conv2d(gate_ch, inter_ch, 1, bias=False),
+            nn.BatchNorm2d(inter_ch),
+        )
+        self.W_x = nn.Sequential(
+            nn.Conv2d(skip_ch, inter_ch, 1, bias=False),
+            nn.BatchNorm2d(inter_ch),
+        )
+        self.psi = nn.Sequential(
+            nn.Conv2d(inter_ch, 1, 1, bias=False),
+            nn.BatchNorm2d(1),
+            nn.Sigmoid(),
+        )
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, g, skip):
+        """
+        Parameters
+        ----------
+        g    : gating signal from the decoder (upsampled to skip's spatial size)
+        skip : encoder skip connection
+        """
+        att = self.relu(self.W_g(g) + self.W_x(skip))
+        att = self.psi(att)
+        return skip * att
+
+
 class UpBlock(nn.Module):
-    """Upsample -> concatenate skip -> ConvBlock."""
+    """Upsample -> attention-gate skip -> concatenate -> ConvBlock."""
 
     def __init__(self, in_ch: int, out_ch: int, bilinear: bool = True):
         super().__init__()
+        # out_ch == skip channels, gate channels == in_ch - out_ch
+        gate_ch = in_ch - out_ch
+        self.attention = AttentionGate(gate_ch, out_ch)
+
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode="bilinear",
                                   align_corners=True)
@@ -71,6 +116,7 @@ class UpBlock(nn.Module):
         dx = skip.size(3) - x.size(3)
         x = F.pad(x, [dx // 2, dx - dx // 2,
                        dy // 2, dy - dy // 2])
+        skip = self.attention(g=x, skip=skip)
         x = torch.cat([skip, x], dim=1)
         return self.conv(x)
 

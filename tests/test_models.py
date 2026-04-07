@@ -18,6 +18,7 @@ import pytest
 from task1.models import (
     ConvBlock,
     DownBlock,
+    AttentionGate,
     UpBlock,
     ASPP,
     UNet,
@@ -79,6 +80,33 @@ class TestDownBlock:
         x = torch.randn(1, 3, 32, 32)
         out = block(x)
         assert out.shape == (1, 32, 16, 16)
+
+
+class TestAttentionGate:
+
+    def test_output_shape(self):
+        gate = AttentionGate(gate_ch=128, skip_ch=64)
+        g = torch.randn(BATCH, 128, H, W)
+        skip = torch.randn(BATCH, 64, H, W)
+        out = gate(g, skip)
+        assert out.shape == (BATCH, 64, H, W)
+
+    def test_output_bounded(self):
+        """Output should be skip * sigmoid(...), so bounded by skip magnitude."""
+        gate = AttentionGate(gate_ch=64, skip_ch=64)
+        g = torch.randn(BATCH, 64, H, W)
+        skip = torch.ones(BATCH, 64, H, W)
+        out = gate(g, skip)
+        # sigmoid output is in [0, 1], so |out| <= |skip| = 1
+        assert out.min() >= 0.0
+        assert out.max() <= 1.0
+
+    def test_custom_inter_channels(self):
+        gate = AttentionGate(gate_ch=256, skip_ch=128, inter_ch=32)
+        g = torch.randn(1, 256, 16, 16)
+        skip = torch.randn(1, 128, 16, 16)
+        out = gate(g, skip)
+        assert out.shape == (1, 128, 16, 16)
 
 
 class TestUpBlock:
