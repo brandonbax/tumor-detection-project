@@ -91,7 +91,20 @@ def main():
 
     set_seed(args.seed)
     device = get_device()
-    print(f"Device: {device}")
+
+    print(f"\n{'=' * 55}")
+    print("  Autoencoder Hyperparameters")
+    print(f"{'=' * 55}")
+    print(f"  Device          : {device}")
+    print(f"  Epochs          : {args.epochs}")
+    print(f"  Batch size      : {args.batch_size}")
+    print(f"  Learning rate   : {args.lr}")
+    print(f"  LR min          : {config.LR_MIN}")
+    print(f"  Weight decay    : {args.weight_decay}")
+    print(f"  Patch size      : {args.patch_size}")
+    print(f"  Features        : {args.features}")
+    print(f"  Seed            : {args.seed}")
+    print(f"{'=' * 55}\n")
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     os.makedirs(args.results_dir, exist_ok=True)
