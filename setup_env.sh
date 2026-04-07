@@ -29,8 +29,12 @@ fi
 
 # ── Check conda is available ─────────────────────
 if ! command -v conda &> /dev/null; then
-    fail "conda not found. Install Miniconda or Anaconda first."
-    exit 1
+    if [[ -x /opt/conda/bin/conda ]]; then
+        export PATH="/opt/conda/bin:$PATH"
+    else
+        fail "conda not found. Install Miniconda or Anaconda first."
+        exit 1
+    fi
 fi
 ok "conda found: $(conda --version)"
 

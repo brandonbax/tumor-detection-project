@@ -367,6 +367,5 @@ dependencies:
   - zlib-ng=2.3.3
   - zstd=1.5.7
   - pip:
-      - computer-vision-coursework==0.1.0
       - simsimd==6.5.16
       - tqdm==4.67.3
