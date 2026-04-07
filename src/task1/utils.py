@@ -224,7 +224,8 @@ class SegmentationCriterion(nn.Module):
 
 
 class DeepSupervisionCriterion(nn.Module):
-    """Wraps a base criterion to support deep supervision.
+    """
+    Wraps a base criterion to support deep supervision.
 
     During training the model returns ``(main_logits, [side_logits, ...])``.
     The total loss is::
@@ -302,9 +303,9 @@ def compute_class_weights(dataset,
 
 
 PALETTE = np.array([
-    [0,   0,   255],   # 0 = Other
-    [255, 0,   0],     # 1 = Tumor
-    [0,   255, 0],     # 2 = Stroma
+    [0,   0,   255],   # Blue: 0 = Other
+    [255, 0,   0],     # Red: 1 = Tumor
+    [0,   255, 0],     # Green: 2 = Stroma
 ], dtype=np.uint8)
 
 def denormalize(img_tensor: torch.Tensor) -> np.ndarray:
@@ -358,7 +359,7 @@ def save_prediction_grid(images: torch.Tensor,
     os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"Saved prediction grid → {save_path}")
+    print(f"Saved prediction grid -> {save_path}")
 
 
 def save_confusion_matrix(metrics: SegmentationMetrics,
@@ -385,7 +386,7 @@ def save_confusion_matrix(metrics: SegmentationMetrics,
     os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"Saved confusion matrix → {save_path}")
+    print(f"Saved confusion matrix -> {save_path}")
 
 
 def save_training_curves(train_losses: List[float],
@@ -416,14 +417,14 @@ def save_training_curves(train_losses: List[float],
     os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"Saved training curves → {save_path}")
+    print(f"Saved training curves -> {save_path}")
 
 
 def save_reconstruction_grid(originals: torch.Tensor,
                              reconstructions: torch.Tensor,
                              save_path: str,
                              num_samples: int = 4):
-    """Save original vs. reconstruction pairs (for autoencoder)."""
+    """Save original vs reconstruction pairs (for autoencoder)."""
     n = min(num_samples, originals.size(0))
     fig, axes = plt.subplots(n, 2, figsize=(8, 4 * n))
     if n == 1:
@@ -446,7 +447,7 @@ def save_reconstruction_grid(originals: torch.Tensor,
     os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"Saved reconstruction grid → {save_path}")
+    print(f"Saved reconstruction grid -> {save_path}")
 
 
 def save_class_distribution(dataset,
@@ -490,7 +491,7 @@ def save_class_distribution(dataset,
     os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"Saved class distribution → {save_path}")
+    print(f"Saved class distribution -> {save_path}")
 
     return {name: float(pct) for name, pct in zip(class_names, percentages)}
 
@@ -539,7 +540,7 @@ def save_model_comparison_grid(images: torch.Tensor,
     os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"Saved model comparison grid → {save_path}")
+    print(f"Saved model comparison grid -> {save_path}")
 
 
 def save_metrics_comparison_chart(all_results: Dict[str, Dict],
@@ -580,4 +581,4 @@ def save_metrics_comparison_chart(all_results: Dict[str, Dict],
     os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"Saved metrics comparison chart → {save_path}")
+    print(f"Saved metrics comparison chart -> {save_path}")

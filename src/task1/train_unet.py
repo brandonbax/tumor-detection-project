@@ -133,11 +133,11 @@ def main():
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     os.makedirs(args.results_dir, exist_ok=True)
 
-    # ── Data ─────────────────────────────────
+    # Data
     train_loader, val_loader, _ = get_segmentation_loaders(
         batch_size=args.batch_size, patch_size=args.patch_size)
 
-    # ── Class weights ────────────────────────
+    # Class weights
     ce_weight = None
     if args.use_class_weights:
         print("Computing class weights from training set ...")
@@ -146,13 +146,13 @@ def main():
             patch_size=args.patch_size, is_train=False)
         ce_weight = compute_class_weights(train_ds,
                                           dampen=args.dampen_weights).to(device)
-        print(f"  Class weights: {ce_weight.tolist()}")
+        print(f"Class weights: {ce_weight.tolist()}")
 
-    # ── Model ────────────────────────────────
+    # Model
     model = UNet(features=args.features).to(device)
     print(f"UNet trainable parameters: {model.count_parameters():,}")
 
-    # ── Loss / optimiser / scheduler ─────────
+    # Loss / optimiser / scheduler
     criterion = get_criterion(weight=ce_weight,
                               lambda_dice=args.lambda_dice,
                               lambda_ce=args.lambda_ce).to(device)
@@ -160,7 +160,7 @@ def main():
                       weight_decay=args.weight_decay)
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=config.LR_MIN)
 
-    # ── Training loop ────────────────────────
+    # Training loop
     best_dice = 0.0
     train_losses, val_losses, val_dices = [], [], []
 
@@ -195,14 +195,14 @@ def main():
                 "best_dice": best_dice,
                 "args": vars(args),
             }, ckpt_path)
-            print(f"  ✓ New best model saved (dice={best_dice:.4f})")
+            print(f"New best model saved (dice={best_dice:.4f})")
 
-    # ── Save training curves ─────────────────
+    # Save training curves
     save_training_curves(
         train_losses, val_losses, val_dices,
         os.path.join(args.results_dir, "unet_training_curves.png"))
 
-    # ── Final validation report ──────────────
+    # Final validation report
     print("\n" + "=" * 55)
     print("  FINAL VALIDATION RESULTS (best model)")
     print("=" * 55)

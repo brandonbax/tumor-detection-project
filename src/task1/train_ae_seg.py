@@ -123,7 +123,7 @@ def main():
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     os.makedirs(args.results_dir, exist_ok=True)
 
-    # ── Load pre‑trained encoder ─────────────
+    # Load pre‑trained encoder
     if not os.path.exists(args.ae_checkpoint):
         raise FileNotFoundError(
             f"Autoencoder checkpoint not found: {args.ae_checkpoint}\n"
@@ -136,9 +136,9 @@ def main():
     features = ckpt.get("features", args.features)
     encoder = AEEncoder(features=features)
     encoder.load_state_dict(ckpt["encoder_state_dict"])
-    print(f"  Loaded encoder (features={features})")
+    print(f"Loaded encoder (features={features})")
 
-    # ── Build segmentation model ─────────────
+    # Build segmentation model
     model = AESegmentationModel(encoder, freeze_encoder=True,
                                  features=features).to(device)
 
@@ -147,11 +147,11 @@ def main():
     print(f"AE-Seg total parameters:     {total_params:,}")
     print(f"AE-Seg trainable parameters: {trainable_params:,} (decoder only)")
 
-    # ── Data ─────────────────────────────────
+    # Data
     train_loader, val_loader, _ = get_segmentation_loaders(
         batch_size=args.batch_size, patch_size=args.patch_size)
 
-    # ── Class weights ────────────────────────
+    # Class weights
     ce_weight = None
     if args.use_class_weights:
         print("Computing class weights from training set ...")
@@ -160,9 +160,9 @@ def main():
             patch_size=args.patch_size, is_train=False)
         ce_weight = compute_class_weights(train_ds,
                                           dampen=args.dampen_weights).to(device)
-        print(f"  Class weights: {ce_weight.tolist()}")
+        print(f"Class weights: {ce_weight.tolist()}")
 
-    # ── Loss / optimiser / scheduler ─────────
+    # Loss / optimiser / scheduler
     criterion = get_criterion(weight=ce_weight,
                               lambda_dice=args.lambda_dice,
                               lambda_ce=args.lambda_ce).to(device)
@@ -172,7 +172,7 @@ def main():
                       weight_decay=args.weight_decay)
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=config.LR_MIN)
 
-    # ── Training loop ────────────────────────
+    # Training loop
     best_dice = 0.0
     train_losses, val_losses, val_dices = [], [], []
 
@@ -207,16 +207,16 @@ def main():
                 "features": features,
                 "args": vars(args),
             }, ckpt_path)
-            print(f"  ✓ New best model saved (dice={best_dice:.4f})")
+            print(f"New best model saved (dice={best_dice:.4f})")
 
-    # ── Save curves ──────────────────────────
+    # Save curves
     save_training_curves(
         train_losses, val_losses, val_dices,
         os.path.join(args.results_dir, "ae_seg_training_curves.png"))
 
-    # ── Final validation report ──────────────
+    # Final validation report
     print("\n" + "=" * 55)
-    print("  FINAL VALIDATION RESULTS (AE‑Seg, best model)")
+    print("  FINAL VALIDATION RESULTS (AE-Seg, best model)")
     print("=" * 55)
 
     ckpt = torch.load(os.path.join(args.checkpoint_dir, "ae_seg_best.pth"),

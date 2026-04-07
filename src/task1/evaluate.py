@@ -100,14 +100,14 @@ def main():
     device = get_device()
     os.makedirs(args.results_dir, exist_ok=True)
 
-    # ── Test loader ──────────────────────────
+    # Test loader
     _, _, test_loader = get_segmentation_loaders(
         batch_size=args.batch_size, patch_size=args.patch_size)
 
-    # ── Evaluate models ──────────────────────
+    # Evaluate models
     all_results = {}
 
-    # 1) UNet
+    # UNet
     if os.path.exists(args.unet_ckpt):
         print(f"\n{'='*55}")
         print("  Evaluating UNet on test set")
@@ -123,7 +123,7 @@ def main():
     else:
         print(f"UNet checkpoint not found: {args.unet_ckpt}")
 
-    # 2) AE‑Seg
+    # AE‑Seg
     if os.path.exists(args.ae_seg_ckpt):
         print(f"\n{'='*55}")
         print("  Evaluating AE‑Seg on test set")
@@ -143,7 +143,7 @@ def main():
     else:
         print(f"AE-Seg checkpoint not found: {args.ae_seg_ckpt}")
 
-    # ── Comparison table ─────────────────────
+    # Comparison table
     if len(all_results) >= 2:
         print(f"\n{'='*70}")
         print("  COMPARISON TABLE")
@@ -166,7 +166,7 @@ def main():
             print(row)
         print(f"{'='*70}")
 
-    # ── Save results to JSON ─────────────────
+    # Save results to JSON
     results_path = os.path.join(args.results_dir, "test_results.json")
     # Convert numpy values to Python floats for JSON serialisation
     json_results = {}
@@ -177,7 +177,7 @@ def main():
         json.dump(json_results, f, indent=2, default=str)
     print(f"\nResults saved -> {results_path}")
 
-    # ── Side-by-side model comparison (2.2.2b) ─
+    # Side-by-side model comparison (2.2.2b)
     if len(all_results) >= 2:
         print("\nGenerating side-by-side model comparison...")
         models = {}
@@ -211,7 +211,7 @@ def main():
 
         del models
 
-    # ── Class distribution analysis (2.2.2c) ─
+    # Class distribution analysis (2.2.2c)
     print("\nAnalysing class distribution...")
     train_ds = TissueSegmentationDataset(
         config.TRAIN_IMAGE_DIR, config.TRAIN_LABEL_DIR,
@@ -220,7 +220,7 @@ def main():
         train_ds,
         os.path.join(args.results_dir, "class_distribution.png"))
 
-    # ── Baseline comparison ──────────────────
+    # Baseline comparison
     print("\n  BASELINE COMPARISON")
     print("  " + "-" * 50)
     print(f"  Baseline mean Dice: {config.BASELINE_DICE:.4f}")
