@@ -228,7 +228,17 @@ class UNet(nn.Module):
 
         self.outc = nn.Conv2d(features[0], num_classes, kernel_size=1)
 
+        # Deep supervision: side-output heads at intermediate decoder stages
+        # (excludes the final decoder stage which feeds into self.outc)
+        self.side_heads = nn.ModuleList()
+        for i in range(len(features) - 1, 1, -1):
+            self.side_heads.append(
+                nn.Conv2d(features[i - 1], num_classes, kernel_size=1)
+            )
+
     def forward(self, x):
+        target_size = x.shape[2:]
+
         # Encoder path
         skips = []
         x = self.inc(x)
@@ -244,11 +254,24 @@ class UNet(nn.Module):
         # Multi-scale context at the bottleneck
         x = self.aspp(x)
 
-        # Decoder path
-        for dec, skip in zip(self.decoders, reversed(skips)):
+        # Decoder path with deep supervision side outputs
+        side_outputs = []
+        for i, (dec, skip) in enumerate(
+                zip(self.decoders, reversed(skips))):
             x = dec(x, skip)
+            # Collect side outputs from all but the last decoder stage
+            if i < len(self.side_heads):
+                side_out = self.side_heads[i](x)
+                side_out = F.interpolate(side_out, size=target_size,
+                                         mode="bilinear",
+                                         align_corners=True)
+                side_outputs.append(side_out)
 
-        return self.outc(x)
+        main_out = self.outc(x)
+
+        if self.training:
+            return main_out, side_outputs
+        return main_out
 
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
@@ -359,7 +382,8 @@ class SegDecoderWithSkips(nn.Module):
     from a (frozen) AEEncoder and produces a class mask.
 
     This uses skip connections from the encoder, similar to a U-Net decoder,
-    to recover spatial detail for segmentation.
+    to recover spatial detail for segmentation.  During training, deep
+    supervision side outputs are returned alongside the main prediction.
     """
 
     def __init__(self,
@@ -380,17 +404,43 @@ class SegDecoderWithSkips(nn.Module):
 
         self.outc = nn.Conv2d(features[0], num_classes, kernel_size=1)
 
+        # Deep supervision side-output heads (all but last decoder stage)
+        self.side_heads = nn.ModuleList()
+        for i in range(len(features) - 1, 1, -1):
+            self.side_heads.append(
+                nn.Conv2d(features[i - 1], num_classes, kernel_size=1)
+            )
+
     def forward(self, bottleneck, skips):
         """
         Parameters
         ----------
         bottleneck : tensor from deepest encoder stage
         skips      : list of tensors, high-res first  [skip0, skip1, ...]
+
+        Returns
+        -------
+        During training : (main_logits, [side_logits_1, ...])
+        During eval     : main_logits
         """
+        target_size = skips[0].shape[2:]  # highest-res skip
         x = bottleneck
-        for up, skip in zip(self.ups, reversed(skips)):
+
+        side_outputs = []
+        for i, (up, skip) in enumerate(zip(self.ups, reversed(skips))):
             x = up(x, skip)
-        return self.outc(x)
+            if i < len(self.side_heads):
+                side_out = self.side_heads[i](x)
+                side_out = F.interpolate(side_out, size=target_size,
+                                         mode="bilinear",
+                                         align_corners=True)
+                side_outputs.append(side_out)
+
+        main_out = self.outc(x)
+
+        if self.training:
+            return main_out, side_outputs
+        return main_out
 
 
 class AESegmentationModel(nn.Module):
@@ -423,7 +473,8 @@ class AESegmentationModel(nn.Module):
 
     def forward(self, x):
         bottleneck, skips = self.encoder(x)
-        return self.seg_decoder(bottleneck, skips)
+        result = self.seg_decoder(bottleneck, skips)
+        return result
 
     def count_parameters(self, trainable_only: bool = True):
         if trainable_only:

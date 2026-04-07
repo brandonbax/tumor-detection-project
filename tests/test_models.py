@@ -176,29 +176,22 @@ class TestUNet:
 
     def test_default_output_shape(self, sample_input):
         model = UNet(in_channels=3, num_classes=3)
+        model.eval()
         out = model(sample_input)
         assert out.shape == (BATCH, 3, H, W)
 
     def test_custom_features(self, sample_input):
         model = UNet(in_channels=3, num_classes=5,
                      features=[32, 64, 128, 256])
+        model.eval()
         out = model(sample_input)
         assert out.shape == (BATCH, 5, H, W)
 
     def test_single_class(self, sample_input):
         model = UNet(in_channels=3, num_classes=1)
+        model.eval()
         out = model(sample_input)
         assert out.shape == (BATCH, 1, H, W)
-
-    # @pytest.mark.xfail(
-    #     reason="Known bug: UpBlock bilinear=False channel mismatch "
-    #            "(see test_transposed_conv_upsampling).",
-    #     raises=RuntimeError,
-    # )
-    # def test_bilinear_false(self, sample_input):
-    #     model = UNet(in_channels=3, num_classes=3, bilinear=False)
-    #     out = model(sample_input)
-    #     assert out.shape == (BATCH, 3, H, W)
 
     def test_count_parameters_positive(self):
         model = UNet()
@@ -211,10 +204,9 @@ class TestUNet:
 
     def test_gradients_flow(self, sample_input):
         model = UNet(in_channels=3, num_classes=3)
-        out = model(sample_input)
-        loss = out.sum()
+        main_out, side_outs = model(sample_input)
+        loss = main_out.sum() + sum(s.sum() for s in side_outs)
         loss.backward()
-        # Check that gradients were computed for the first conv layer
         first_weight = next(model.parameters())
         assert first_weight.grad is not None
 
@@ -222,9 +214,33 @@ class TestUNet:
         """UNet should handle inputs whose size is not a power of 2."""
         model = UNet(in_channels=3, num_classes=3,
                      features=[32, 64, 128])
+        model.eval()
         x = torch.randn(1, 3, 48, 48)
         out = model(x)
         assert out.shape == (1, 3, 48, 48)
+
+    def test_deep_supervision_train_mode(self, sample_input):
+        """In train mode, forward returns (main, side_outputs)."""
+        model = UNet(in_channels=3, num_classes=3,
+                     features=[32, 64, 128, 256])
+        model.train()
+        result = model(sample_input)
+        assert isinstance(result, tuple)
+        main_out, side_outs = result
+        assert main_out.shape == (BATCH, 3, H, W)
+        # features=[32,64,128,256] → 3 decoder stages → 2 side heads
+        assert len(side_outs) == 2
+        for s in side_outs:
+            assert s.shape == (BATCH, 3, H, W)
+
+    def test_deep_supervision_eval_mode(self, sample_input):
+        """In eval mode, forward returns only the main output tensor."""
+        model = UNet(in_channels=3, num_classes=3,
+                     features=[32, 64, 128, 256])
+        model.eval()
+        result = model(sample_input)
+        assert isinstance(result, torch.Tensor)
+        assert result.shape == (BATCH, 3, H, W)
 
 
 # ═══════════════════════════════════════════════
@@ -342,6 +358,7 @@ class TestSegDecoderWithSkips:
     def test_output_shape(self):
         features = [64, 128, 256, 512]
         dec = SegDecoderWithSkips(num_classes=3, features=features)
+        dec.eval()
         bottleneck = torch.randn(BATCH, 512, H // 8, W // 8)
         skips = [
             torch.randn(BATCH, 64, H, W),
@@ -354,6 +371,7 @@ class TestSegDecoderWithSkips:
     def test_different_num_classes(self):
         features = [32, 64, 128]
         dec = SegDecoderWithSkips(num_classes=5, features=features)
+        dec.eval()
         bottleneck = torch.randn(BATCH, 128, H // 4, W // 4)
         skips = [
             torch.randn(BATCH, 32, H, W),
@@ -361,6 +379,23 @@ class TestSegDecoderWithSkips:
         ]
         out = dec(bottleneck, skips)
         assert out.shape == (BATCH, 5, H, W)
+
+    def test_deep_supervision_train_mode(self):
+        features = [64, 128, 256, 512]
+        dec = SegDecoderWithSkips(num_classes=3, features=features)
+        dec.train()
+        bottleneck = torch.randn(BATCH, 512, H // 8, W // 8)
+        skips = [
+            torch.randn(BATCH, 64, H, W),
+            torch.randn(BATCH, 128, H // 2, W // 2),
+            torch.randn(BATCH, 256, H // 4, W // 4),
+        ]
+        main_out, side_outs = dec(bottleneck, skips)
+        assert main_out.shape == (BATCH, 3, H, W)
+        # 3 decoder stages → 2 side heads
+        assert len(side_outs) == 2
+        for s in side_outs:
+            assert s.shape == (BATCH, 3, H, W)
 
 
 # ═══════════════════════════════════════════════
@@ -376,6 +411,7 @@ class TestAESegmentationModel:
     def test_output_shape(self, sample_input, encoder):
         model = AESegmentationModel(encoder, num_classes=3,
                                     freeze_encoder=True)
+        model.eval()
         out = model(sample_input)
         assert out.shape == (BATCH, 3, H, W)
 
@@ -409,8 +445,10 @@ class TestAESegmentationModel:
     def test_gradients_only_decoder(self, sample_input, encoder):
         model = AESegmentationModel(encoder, num_classes=3,
                                     freeze_encoder=True)
-        out = model(sample_input)
-        loss = out.sum()
+        model.train()
+        result = model(sample_input)
+        main_out, side_outs = result
+        loss = main_out.sum() + sum(s.sum() for s in side_outs)
         loss.backward()
         # Encoder grads should be None (frozen)
         for param in model.encoder.parameters():
@@ -426,6 +464,7 @@ class TestAESegmentationModel:
         enc = AEEncoder(in_channels=3, features=[16, 32, 64])
         model = AESegmentationModel(enc, num_classes=2,
                                     freeze_encoder=True)
+        model.eval()
         x = torch.randn(1, 3, 32, 32)
         out = model(x)
         assert out.shape == (1, 2, 32, 32)
@@ -438,9 +477,11 @@ class TestAESegmentationModel:
             for name, param in encoder.named_parameters()
         }
         model = AESegmentationModel(encoder, freeze_encoder=True)
+        model.train()
         # Run a forward + backward on the seg model
-        out = model(sample_input)
-        out.sum().backward()
+        main_out, side_outs = model(sample_input)
+        loss = main_out.sum() + sum(s.sum() for s in side_outs)
+        loss.backward()
         # Encoder weights should be unchanged
         for name, param in model.encoder.named_parameters():
             assert torch.equal(param, original_weights[name])

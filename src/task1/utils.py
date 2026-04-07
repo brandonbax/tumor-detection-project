@@ -223,17 +223,51 @@ class SegmentationCriterion(nn.Module):
         return self.loss(logits, targets)
 
 
+class DeepSupervisionCriterion(nn.Module):
+    """Wraps a base criterion to support deep supervision.
+
+    During training the model returns ``(main_logits, [side_logits, ...])``.
+    The total loss is::
+
+        loss = base_criterion(main) + side_weight * mean(base_criterion(side_i))
+
+    During evaluation the model returns only ``main_logits`` and this
+    criterion behaves identically to the base criterion.
+    """
+
+    def __init__(self, base_criterion: nn.Module, side_weight: float = 0.5):
+        super().__init__()
+        self.base = base_criterion
+        self.side_weight = side_weight
+
+    def forward(self, model_output, targets: torch.Tensor):
+        if isinstance(model_output, tuple):
+            main_logits, side_logits = model_output
+            loss = self.base(main_logits, targets)
+            if side_logits:
+                side_loss = sum(self.base(s, targets) for s in side_logits)
+                loss = loss + self.side_weight * side_loss / len(side_logits)
+            return loss
+        return self.base(model_output, targets)
+
+
 def get_criterion(weight: Optional[torch.Tensor] = None,
                   lambda_dice: float = config.LAMBDA_DICE,
-                  lambda_ce: float = config.LAMBDA_CE) -> SegmentationCriterion:
+                  lambda_ce: float = config.LAMBDA_CE,
+                  deep_supervision: bool = True,
+                  side_weight: float = 0.5) -> nn.Module:
     """
-    Factory that returns a MONAI-backed Dice + CE criterion.
+    Factory that returns a MONAI-backed Dice + CE criterion,
+    optionally wrapped for deep supervision.
     """
-    return SegmentationCriterion(
+    base = SegmentationCriterion(
         weight=weight,
         lambda_dice=lambda_dice,
         lambda_ce=lambda_ce,
     )
+    if deep_supervision:
+        return DeepSupervisionCriterion(base, side_weight=side_weight)
+    return base
 
 
 def compute_class_weights(dataset,

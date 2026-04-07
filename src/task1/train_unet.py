@@ -65,8 +65,8 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         images = images.to(device, non_blocking=True)
         masks = masks.to(device, non_blocking=True)
 
-        logits = model(images)
-        loss = criterion(logits, masks)
+        output = model(images)
+        loss = criterion(output, masks)
 
         optimizer.zero_grad()
         loss.backward()
