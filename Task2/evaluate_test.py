@@ -8,12 +8,13 @@ Labels are parsed from filenames, e.g.:
 Outputs: accuracy, precision, recall, F1 and confusion matrix for both approaches.
 """
 
+import json
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models, transforms
-from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
+from sklearn.metrics import classification_report, accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
@@ -137,6 +138,23 @@ def plot_confusion_matrix(preds, labels, class_names, title, save_path):
     print(f"  Saved: {save_path}")
 
 
+def metrics_dict(preds, labels, class_names):
+    return {
+        "accuracy":           round(float(accuracy_score(labels, preds)), 4),
+        "macro_precision":    round(float(precision_score(labels, preds, average="macro", zero_division=0)), 4),
+        "macro_recall":       round(float(recall_score(labels, preds, average="macro", zero_division=0)), 4),
+        "macro_f1":           round(float(f1_score(labels, preds, average="macro", zero_division=0)), 4),
+        "per_class": {
+            name: {
+                "precision": round(float(precision_score(labels, preds, labels=[i], average="macro", zero_division=0)), 4),
+                "recall":    round(float(recall_score(labels, preds, labels=[i], average="macro", zero_division=0)), 4),
+                "f1":        round(float(f1_score(labels, preds, labels=[i], average="macro", zero_division=0)), 4),
+            }
+            for i, name in enumerate(class_names)
+        },
+    }
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -152,6 +170,8 @@ def main():
     if args.tta:
         print("Test-time augmentation enabled (4 views: orig + hflip + vflip + both)")
 
+    summary = {}
+
     print("\n── Approach A (EfficientNet-B0, weighted loss) ──")
     preds_a, lbls = run_inference(load_model_a(len(TARGET_CLASSES)), loader, tta=args.tta)
     print(classification_report(lbls, preds_a, target_names=TARGET_CLASSES, digits=4))
@@ -159,6 +179,7 @@ def main():
     plot_confusion_matrix(preds_a, lbls, TARGET_CLASSES,
                           f"Approach A — Test Set{' (TTA)' if args.tta else ''}",
                           OUTPUT_DIR / f"confusion_matrix_a{tta_suffix}.png")
+    summary[f"approach_a{tta_suffix}"] = metrics_dict(preds_a, lbls, TARGET_CLASSES)
 
     for backbone in ["resnet18", "resnet50", "efficientnet_b0",
                      "efficientnet_b0_unfrozen", "efficientnet_b0_unfrozen_weighted",
@@ -174,6 +195,12 @@ def main():
         plot_confusion_matrix(preds_b, lbls, TARGET_CLASSES,
                               f"Approach B {backbone}{' (TTA)' if args.tta else ''} — Test Set",
                               OUTPUT_DIR / f"confusion_matrix_b_{backbone}{tta_suffix}.png")
+        summary[f"approach_b_{backbone}{tta_suffix}"] = metrics_dict(preds_b, lbls, TARGET_CLASSES)
+
+    summary_path = OUTPUT_DIR / f"results_summary{tta_suffix}.json"
+    with open(summary_path, "w") as f:
+        json.dump(summary, f, indent=2)
+    print(f"\nResults saved to {summary_path}")
 
 
 if __name__ == "__main__":
