@@ -376,31 +376,34 @@ class Autoencoder(nn.Module):
 #  3.  Segmentation decoder on frozen AE encoder
 # ═══════════════════════════════════════════════
 
-class SegDecoderWithSkips(nn.Module):
+class SegDecoder(nn.Module):
     """
-    A segmentation decoder that takes the bottleneck and skip features
-    from a (frozen) AEEncoder and produces a class mask.
+    Segmentation decoder for the frozen-encoder AE-Seg pipeline.
 
-    This uses skip connections from the encoder, similar to a U-Net decoder,
-    to recover spatial detail for segmentation.  During training, deep
-    supervision side outputs are returned alongside the main prediction.
+    Mirrors the UNet decoder structure (upsample → residual ConvBlock at
+    each stage, deep supervision side outputs) but **without** skip
+    connections or attention gates.  This forces all spatial information
+    through the bottleneck, giving a fair test of pre-training quality.
     """
 
     def __init__(self,
                  num_classes: int = config.NUM_CLASSES,
                  features: list = None,
-                 bilinear: bool = True):
+                 target_size: tuple = None):
         super().__init__()
         if features is None:
             features = [64, 128, 256, 512]
 
-        # Decoder mirrors encoder in reverse
+        self.target_size = target_size  # (H, W) of the input image
+
+        # Decoder mirrors encoder in reverse: upsample → ConvBlock
         self.ups = nn.ModuleList()
         for i in range(len(features) - 1, 0, -1):
-            self.ups.append(
-                UpBlock(features[i] + features[i - 1], features[i - 1],
-                        bilinear=bilinear)
-            )
+            self.ups.append(nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear",
+                            align_corners=True),
+                ConvBlock(features[i], features[i - 1]),
+            ))
 
         self.outc = nn.Conv2d(features[0], num_classes, kernel_size=1)
 
@@ -411,29 +414,31 @@ class SegDecoderWithSkips(nn.Module):
                 nn.Conv2d(features[i - 1], num_classes, kernel_size=1)
             )
 
-    def forward(self, bottleneck, skips):
+    def forward(self, bottleneck, target_size=None):
         """
         Parameters
         ----------
-        bottleneck : tensor from deepest encoder stage
-        skips      : list of tensors, high-res first  [skip0, skip1, ...]
+        bottleneck  : tensor from deepest encoder stage
+        target_size : (H, W) for side-output upsampling; inferred from
+                      bottleneck and number of stages if not provided
 
         Returns
         -------
         During training : (main_logits, [side_logits_1, ...])
         During eval     : main_logits
         """
-        target_size = skips[0].shape[2:]  # highest-res skip
+        ts = target_size or self.target_size
         x = bottleneck
 
         side_outputs = []
-        for i, (up, skip) in enumerate(zip(self.ups, reversed(skips))):
-            x = up(x, skip)
+        for i, up in enumerate(self.ups):
+            x = up(x)
             if i < len(self.side_heads):
                 side_out = self.side_heads[i](x)
-                side_out = F.interpolate(side_out, size=target_size,
-                                         mode="bilinear",
-                                         align_corners=True)
+                if ts is not None:
+                    side_out = F.interpolate(side_out, size=ts,
+                                             mode="bilinear",
+                                             align_corners=True)
                 side_outputs.append(side_out)
 
         main_out = self.outc(x)
@@ -445,7 +450,11 @@ class SegDecoderWithSkips(nn.Module):
 
 class AESegmentationModel(nn.Module):
     """
-    Combines a frozen AEEncoder with a trainable SegDecoderWithSkips.
+    Combines a frozen AEEncoder with a trainable SegDecoder.
+
+    The decoder does **not** use skip connections or attention gates,
+    so all spatial information must pass through the bottleneck.
+    This gives a fair evaluation of the pre-trained representation.
 
     Usage
     -----
@@ -469,11 +478,15 @@ class AESegmentationModel(nn.Module):
         if features is None:
             features = encoder.features
 
-        self.seg_decoder = SegDecoderWithSkips(num_classes, features)
+        # ASPP at the bottleneck for multi-scale context (trainable)
+        self.aspp = ASPP(features[-1], features[-1])
+        self.seg_decoder = SegDecoder(num_classes, features)
 
     def forward(self, x):
-        bottleneck, skips = self.encoder(x)
-        result = self.seg_decoder(bottleneck, skips)
+        target_size = x.shape[2:]
+        bottleneck, _skips = self.encoder(x)
+        bottleneck = self.aspp(bottleneck)
+        result = self.seg_decoder(bottleneck, target_size=target_size)
         return result
 
     def count_parameters(self, trainable_only: bool = True):

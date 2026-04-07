@@ -25,7 +25,7 @@ from task1.models import (
     AEEncoder,
     AEDecoder,
     Autoencoder,
-    SegDecoderWithSkips,
+    SegDecoder,
     AESegmentationModel,
 )
 
@@ -353,49 +353,47 @@ class TestAutoencoder:
 #  SegDecoderWithSkips
 # ═══════════════════════════════════════════════
 
-class TestSegDecoderWithSkips:
+class TestSegDecoder:
 
     def test_output_shape(self):
         features = [64, 128, 256, 512]
-        dec = SegDecoderWithSkips(num_classes=3, features=features)
+        dec = SegDecoder(num_classes=3, features=features)
         dec.eval()
+        # 3 down-blocks → bottleneck at H/8
         bottleneck = torch.randn(BATCH, 512, H // 8, W // 8)
-        skips = [
-            torch.randn(BATCH, 64, H, W),
-            torch.randn(BATCH, 128, H // 2, W // 2),
-            torch.randn(BATCH, 256, H // 4, W // 4),
-        ]
-        out = dec(bottleneck, skips)
+        out = dec(bottleneck)
         assert out.shape == (BATCH, 3, H, W)
 
     def test_different_num_classes(self):
         features = [32, 64, 128]
-        dec = SegDecoderWithSkips(num_classes=5, features=features)
+        dec = SegDecoder(num_classes=5, features=features)
         dec.eval()
         bottleneck = torch.randn(BATCH, 128, H // 4, W // 4)
-        skips = [
-            torch.randn(BATCH, 32, H, W),
-            torch.randn(BATCH, 64, H // 2, W // 2),
-        ]
-        out = dec(bottleneck, skips)
+        out = dec(bottleneck)
         assert out.shape == (BATCH, 5, H, W)
 
     def test_deep_supervision_train_mode(self):
         features = [64, 128, 256, 512]
-        dec = SegDecoderWithSkips(num_classes=3, features=features)
+        dec = SegDecoder(num_classes=3, features=features,
+                         target_size=(H, W))
         dec.train()
         bottleneck = torch.randn(BATCH, 512, H // 8, W // 8)
-        skips = [
-            torch.randn(BATCH, 64, H, W),
-            torch.randn(BATCH, 128, H // 2, W // 2),
-            torch.randn(BATCH, 256, H // 4, W // 4),
-        ]
-        main_out, side_outs = dec(bottleneck, skips)
+        main_out, side_outs = dec(bottleneck)
         assert main_out.shape == (BATCH, 3, H, W)
         # 3 decoder stages → 2 side heads
         assert len(side_outs) == 2
         for s in side_outs:
             assert s.shape == (BATCH, 3, H, W)
+
+    def test_no_skip_connections(self):
+        """SegDecoder takes only a bottleneck — no skip arguments."""
+        features = [32, 64, 128]
+        dec = SegDecoder(num_classes=3, features=features)
+        dec.eval()
+        bottleneck = torch.randn(1, 128, 8, 8)
+        out = dec(bottleneck)
+        # 2 upsample stages: 8→16→32
+        assert out.shape == (1, 3, 32, 32)
 
 
 # ═══════════════════════════════════════════════
@@ -446,8 +444,7 @@ class TestAESegmentationModel:
         model = AESegmentationModel(encoder, num_classes=3,
                                     freeze_encoder=True)
         model.train()
-        result = model(sample_input)
-        main_out, side_outs = result
+        main_out, side_outs = model(sample_input)
         loss = main_out.sum() + sum(s.sum() for s in side_outs)
         loss.backward()
         # Encoder grads should be None (frozen)
@@ -458,6 +455,19 @@ class TestAESegmentationModel:
             p.grad is not None for p in model.seg_decoder.parameters()
         )
         assert has_decoder_grad
+
+    def test_no_skip_connections(self, sample_input, encoder):
+        """Decoder should not use encoder skip connections."""
+        model = AESegmentationModel(encoder, num_classes=3,
+                                    freeze_encoder=True)
+        model.eval()
+        out = model(sample_input)
+        assert out.shape == (BATCH, 3, H, W)
+        # SegDecoder has no AttentionGate or UpBlock — only ConvBlock
+        assert not any(
+            isinstance(m, AttentionGate)
+            for m in model.seg_decoder.modules()
+        )
 
     def test_uses_encoder_features(self):
         """Model should infer features from encoder if not provided."""
@@ -471,17 +481,14 @@ class TestAESegmentationModel:
 
     def test_pretrained_encoder_weights_preserved(self, sample_input, encoder):
         """Freezing should not alter existing encoder weights."""
-        # Snapshot encoder weights before wrapping
         original_weights = {
             name: param.clone()
             for name, param in encoder.named_parameters()
         }
         model = AESegmentationModel(encoder, freeze_encoder=True)
         model.train()
-        # Run a forward + backward on the seg model
         main_out, side_outs = model(sample_input)
         loss = main_out.sum() + sum(s.sum() for s in side_outs)
         loss.backward()
-        # Encoder weights should be unchanged
         for name, param in model.encoder.named_parameters():
             assert torch.equal(param, original_weights[name])

@@ -166,8 +166,9 @@ def main():
     criterion = get_criterion(weight=ce_weight,
                               lambda_dice=args.lambda_dice,
                               lambda_ce=args.lambda_ce).to(device)
-    # Only optimise decoder parameters
-    optimizer = AdamW(model.seg_decoder.parameters(), lr=args.lr,
+    # Only optimise trainable parameters (ASPP + decoder; encoder is frozen)
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = AdamW(trainable_params, lr=args.lr,
                       weight_decay=args.weight_decay)
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=config.LR_MIN)
 
