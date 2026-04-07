@@ -318,7 +318,10 @@ class TestMain:
              patch("task1.evaluate.get_segmentation_loaders",
                    return_value=(loader, loader, loader)), \
              patch("task1.evaluate.get_device",
-                   return_value=torch.device("cpu")):
+                   return_value=torch.device("cpu")), \
+             patch("task1.evaluate.save_class_distribution",
+                   return_value={}), \
+             patch("task1.evaluate.TissueSegmentationDataset"):
             main()
 
         # UNet outputs
@@ -370,7 +373,10 @@ class TestMain:
              patch("task1.evaluate.get_segmentation_loaders",
                    return_value=(loader, loader, loader)), \
              patch("task1.evaluate.get_device",
-                   return_value=torch.device("cpu")):
+                   return_value=torch.device("cpu")), \
+             patch("task1.evaluate.save_class_distribution",
+                   return_value={}), \
+             patch("task1.evaluate.TissueSegmentationDataset"):
             main()
 
         assert os.path.isfile(
@@ -402,7 +408,10 @@ class TestMain:
              patch("task1.evaluate.get_segmentation_loaders",
                    return_value=(_make_loader(),) * 3), \
              patch("task1.evaluate.get_device",
-                   return_value=torch.device("cpu")):
+                   return_value=torch.device("cpu")), \
+             patch("task1.evaluate.save_class_distribution",
+                   return_value={}), \
+             patch("task1.evaluate.TissueSegmentationDataset"):
             main()
 
         results_path = os.path.join(results_dir, "test_results.json")
@@ -438,7 +447,10 @@ class TestMain:
              patch("task1.evaluate.get_segmentation_loaders",
                    return_value=(loader, loader, loader)), \
              patch("task1.evaluate.get_device",
-                   return_value=torch.device("cpu")):
+                   return_value=torch.device("cpu")), \
+             patch("task1.evaluate.save_class_distribution",
+                   return_value={}), \
+             patch("task1.evaluate.TissueSegmentationDataset"):
             main()
 
         results_path = os.path.join(results_dir, "test_results.json")

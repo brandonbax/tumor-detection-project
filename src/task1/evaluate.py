@@ -8,10 +8,13 @@ from tqdm import tqdm
 import config
 from task1.dataset import get_segmentation_loaders
 from task1.models import UNet, AEEncoder, AESegmentationModel
+from task1.dataset import TissueSegmentationDataset
 from task1.utils import (
     set_seed, get_device,
     SegmentationMetrics,
     save_prediction_grid, save_confusion_matrix,
+    save_class_distribution, save_model_comparison_grid,
+    save_metrics_comparison_chart,
 )
 
 
@@ -173,6 +176,49 @@ def main():
     with open(results_path, "w") as f:
         json.dump(json_results, f, indent=2, default=str)
     print(f"\nResults saved -> {results_path}")
+
+    # ── Side-by-side model comparison (2.2.2b) ─
+    if len(all_results) >= 2:
+        print("\nGenerating side-by-side model comparison...")
+        models = {}
+        if os.path.exists(args.unet_ckpt):
+            models["UNet"] = load_unet(args.unet_ckpt, device)
+        if os.path.exists(args.ae_seg_ckpt):
+            models["AE-Seg"] = load_ae_seg(args.ae_seg_ckpt, device)
+
+        for m in models.values():
+            m.eval()
+
+        with torch.no_grad():
+            for images, masks in test_loader:
+                images = images.to(device)
+                masks = masks.to(device)
+                model_preds = {
+                    name: m(images).argmax(dim=1)
+                    for name, m in models.items()
+                }
+                save_model_comparison_grid(
+                    images, masks, model_preds,
+                    os.path.join(args.results_dir,
+                                 "model_comparison.png"),
+                    num_samples=6,
+                )
+                break
+
+        save_metrics_comparison_chart(
+            all_results,
+            os.path.join(args.results_dir, "metrics_comparison.png"))
+
+        del models
+
+    # ── Class distribution analysis (2.2.2c) ─
+    print("\nAnalysing class distribution...")
+    train_ds = TissueSegmentationDataset(
+        config.TRAIN_IMAGE_DIR, config.TRAIN_LABEL_DIR,
+        patch_size=args.patch_size, is_train=False)
+    class_dist = save_class_distribution(
+        train_ds,
+        os.path.join(args.results_dir, "class_distribution.png"))
 
     # ── Baseline comparison ──────────────────
     print("\n  BASELINE COMPARISON")
