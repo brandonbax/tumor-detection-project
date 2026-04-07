@@ -15,8 +15,6 @@ import torchmetrics
 from torchmetrics.classification import (
     MulticlassAccuracy,
     MulticlassConfusionMatrix,
-    MulticlassF1Score,
-    MulticlassJaccardIndex,
     MulticlassPrecision,
     MulticlassRecall,
 )
@@ -46,10 +44,15 @@ def get_device() -> torch.device:
 
 class SegmentationMetrics:
     """
-    Wrapper around torchmetrics for segmentation evaluation.
+    Segmentation evaluation with per-image Dice and IoU averaging.
 
-    Accumulates predictions over batches on-device, then computes
-    per-class and mean Dice, IoU, pixel accuracy, precision, and recall.
+    Dice and IoU are computed per-image, per-class, then averaged across
+    images (skipping images where a class is absent from the ground
+    truth).  This avoids large-region dominance that occurs with global
+    TP/FP/FN accumulation.
+
+    Pixel accuracy, precision, recall, and the confusion matrix are
+    still accumulated globally via torchmetrics.
     """
 
     def __init__(self,
@@ -58,11 +61,8 @@ class SegmentationMetrics:
         self.num_classes = num_classes
         self.device = device or torch.device("cpu")
 
-        self._metrics = torchmetrics.MetricCollection({
-            "dice": MulticlassF1Score(
-                num_classes=num_classes, average=None),
-            "iou": MulticlassJaccardIndex(
-                num_classes=num_classes, average=None),
+        # Global metrics (torchmetrics)
+        self._global_metrics = torchmetrics.MetricCollection({
             "pixel_accuracy": MulticlassAccuracy(
                 num_classes=num_classes, average="micro"),
             "precision": MulticlassPrecision(
@@ -73,8 +73,17 @@ class SegmentationMetrics:
                 num_classes=num_classes),
         }).to(self.device)
 
+        # Per-image Dice / IoU accumulators
+        self._dice_sums = torch.zeros(num_classes, device=self.device)
+        self._iou_sums = torch.zeros(num_classes, device=self.device)
+        self._class_image_counts = torch.zeros(num_classes,
+                                               device=self.device)
+
     def reset(self):
-        self._metrics.reset()
+        self._global_metrics.reset()
+        self._dice_sums.zero_()
+        self._iou_sums.zero_()
+        self._class_image_counts.zero_()
 
     def update(self, preds: torch.Tensor, targets: torch.Tensor):
         """
@@ -86,27 +95,54 @@ class SegmentationMetrics:
         if preds.dim() == 4:
             preds = preds.argmax(dim=1)
 
-        # torchmetrics expects flat tensors for classification metrics
-        self._metrics.update(preds.flatten(), targets.flatten())
+        # Global metrics
+        self._global_metrics.update(preds.flatten(), targets.flatten())
 
-    def compute(self) -> Dict:
-        """Compute all metrics and return raw torchmetrics output."""
-        return self._metrics.compute()
+        # Per-image Dice and IoU
+        for i in range(preds.size(0)):
+            pred_i = preds[i]
+            target_i = targets[i]
+
+            for c in range(self.num_classes):
+                gt_c = (target_i == c)
+                if not gt_c.any():
+                    continue
+
+                pred_c = (pred_i == c)
+                tp = (pred_c & gt_c).sum().float()
+                fp = (pred_c & ~gt_c).sum().float()
+                fn = (~pred_c & gt_c).sum().float()
+
+                dice_denom = 2.0 * tp + fp + fn
+                if dice_denom > 0:
+                    self._dice_sums[c] += 2.0 * tp / dice_denom
+
+                iou_denom = tp + fp + fn
+                if iou_denom > 0:
+                    self._iou_sums[c] += tp / iou_denom
+
+                self._class_image_counts[c] += 1
+
+    def _per_class_dice(self) -> torch.Tensor:
+        counts = self._class_image_counts.clamp(min=1)
+        return self._dice_sums / counts
+
+    def _per_class_iou(self) -> torch.Tensor:
+        counts = self._class_image_counts.clamp(min=1)
+        return self._iou_sums / counts
 
     def mean_dice(self) -> float:
-        computed = self.compute()
-        return float(computed["dice"].mean())
+        return float(self._per_class_dice().mean())
 
     def mean_iou(self) -> float:
-        computed = self.compute()
-        return float(computed["iou"].mean())
+        return float(self._per_class_iou().mean())
 
     @property
     def confusion(self) -> np.ndarray:
         """
         Return the confusion matrix as a numpy array (for visualisation).
         """
-        computed = self.compute()
+        computed = self._global_metrics.compute()
         return computed["confusion"].cpu().numpy().astype(np.int64)
 
     def summary(self, class_names: List[str] = None) -> Dict:
@@ -115,10 +151,10 @@ class SegmentationMetrics:
         """
         if class_names is None:
             class_names = config.CLASS_NAMES
-        computed = self.compute()
+        computed = self._global_metrics.compute()
 
-        dice = computed["dice"].cpu().numpy()
-        iou = computed["iou"].cpu().numpy()
+        dice = self._per_class_dice().cpu().numpy()
+        iou = self._per_class_iou().cpu().numpy()
         prec = computed["precision"].cpu().numpy()
         rec = computed["recall"].cpu().numpy()
 
