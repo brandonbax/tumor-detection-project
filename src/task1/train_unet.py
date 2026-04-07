@@ -43,7 +43,7 @@ def parse_args():
     p.add_argument("--weight_decay", type=float, default=config.UNET_WEIGHT_DECAY)
     p.add_argument("--patch_size", type=int, default=config.PATCH_SIZE)
     p.add_argument("--features", type=int, nargs="+",
-                    default=[64, 128, 256, 512, 1024])
+                    default=config.UNET_FEATURES)
     p.add_argument("--data_root", type=str, default=config.DATASET_ROOT)
     p.add_argument("--use_class_weights", action="store_true",
                     help="Compute inverse-frequency class weights for CE")
@@ -134,7 +134,7 @@ def main():
     criterion = get_criterion(weight=ce_weight).to(device)
     optimizer = AdamW(model.parameters(), lr=args.lr,
                       weight_decay=args.weight_decay)
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=config.LR_MIN)
 
     # ── Training loop ────────────────────────
     best_dice = 0.0

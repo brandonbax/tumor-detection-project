@@ -65,7 +65,7 @@ def evaluate_model(model, test_loader, device, name: str, results_dir: str):
 def load_unet(ckpt_path: str, device):
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     args = ckpt.get("args", {})
-    features = args.get("features", [64, 128, 256, 512, 1024])
+    features = args.get("features", config.UNET_FEATURES)
     model = UNet(features=features).to(device)
     model.load_state_dict(ckpt["model_state_dict"])
     return model
@@ -73,7 +73,7 @@ def load_unet(ckpt_path: str, device):
 
 def load_ae_seg(ckpt_path: str, device):
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
-    features = ckpt.get("features", [64, 128, 256, 512])
+    features = ckpt.get("features", config.AE_FEATURES)
     encoder = AEEncoder(features=features)
     model = AESegmentationModel(encoder, freeze_encoder=True,
                                  features=features).to(device)
@@ -177,13 +177,11 @@ def main():
     # ── Baseline comparison ──────────────────
     print("\n  BASELINE COMPARISON")
     print("  " + "-" * 50)
-    baseline_dice = 0.4670
-    baseline_params = 125_000_000
-    print(f"  Baseline mean Dice: {baseline_dice:.4f}")
-    print(f"  Baseline params:    {baseline_params:,}")
+    print(f"  Baseline mean Dice: {config.BASELINE_DICE:.4f}")
+    print(f"  Baseline params:    {config.BASELINE_PARAMS:,}")
     for name, res in all_results.items():
         md = res.get("mean_dice", 0)
-        delta = md - baseline_dice
+        delta = md - config.BASELINE_DICE
         print(f"  {name} mean Dice: {md:.4f}  "
               f"(delta = {delta:+.4f})")
     print()

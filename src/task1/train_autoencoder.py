@@ -25,7 +25,7 @@ def parse_args():
     p.add_argument("--weight_decay", type=float, default=config.AE_WEIGHT_DECAY)
     p.add_argument("--patch_size", type=int, default=config.PATCH_SIZE)
     p.add_argument("--features", type=int, nargs="+",
-                    default=[64, 128, 256, 512])
+                    default=config.AE_FEATURES)
     p.add_argument("--data_root", type=str, default=config.DATASET_ROOT)
     p.add_argument("--checkpoint_dir", type=str, default=config.CHECKPOINT_DIR)
     p.add_argument("--results_dir", type=str, default=config.RESULTS_DIR)
@@ -43,9 +43,9 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         # Target for reconstruction: un‑normalise to [0, 1]
         # (the decoder outputs sigmoid → [0, 1])
         with torch.no_grad():
-            mean = torch.tensor([0.485, 0.456, 0.406],
+            mean = torch.tensor(config.DATASET_MEAN,
                                 device=device).view(1, 3, 1, 1)
-            std = torch.tensor([0.229, 0.224, 0.225],
+            std = torch.tensor(config.DATASET_STD,
                                device=device).view(1, 3, 1, 1)
             target = images * std + mean    # back to [0, 1]
             target = target.clamp(0, 1)
@@ -67,8 +67,8 @@ def validate(model, loader, criterion, device):
     model.eval()
     running_loss = 0.0
 
-    mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
-    std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
+    mean = torch.tensor(config.DATASET_MEAN, device=device).view(1, 3, 1, 1)
+    std = torch.tensor(config.DATASET_STD, device=device).view(1, 3, 1, 1)
 
     for images in tqdm(loader, desc="  Val  ", leave=False):
         images = images.to(device, non_blocking=True)
@@ -108,7 +108,7 @@ def main():
     criterion = nn.MSELoss()
     optimizer = AdamW(model.parameters(), lr=args.lr,
                       weight_decay=args.weight_decay)
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=config.LR_MIN)
 
     # ── Training loop ────────────────────────
     best_loss = float("inf")

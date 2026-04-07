@@ -31,7 +31,7 @@ def parse_args():
                     default=config.AE_SEG_WEIGHT_DECAY)
     p.add_argument("--patch_size", type=int, default=config.PATCH_SIZE)
     p.add_argument("--features", type=int, nargs="+",
-                    default=[64, 128, 256, 512])
+                    default=config.AE_FEATURES)
     p.add_argument("--data_root", type=str, default=config.DATASET_ROOT)
     p.add_argument("--use_class_weights", action="store_true")
     p.add_argument("--checkpoint_dir", type=str, default=config.CHECKPOINT_DIR)
@@ -144,7 +144,7 @@ def main():
     # Only optimise decoder parameters
     optimizer = AdamW(model.seg_decoder.parameters(), lr=args.lr,
                       weight_decay=args.weight_decay)
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=config.LR_MIN)
 
     # ── Training loop ────────────────────────
     best_dice = 0.0

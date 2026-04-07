@@ -48,13 +48,23 @@ UNET_EPOCHS = 50
 UNET_BATCH_SIZE = 16
 UNET_LR = 1e-4
 UNET_WEIGHT_DECAY = 1e-4
+UNET_FEATURES = [64, 128, 256, 512, 1024]
 
 AE_EPOCHS = 30
 AE_BATCH_SIZE = 32
 AE_LR = 1e-3
 AE_WEIGHT_DECAY = 1e-4
+AE_FEATURES = [64, 128, 256, 512]
 
 AE_SEG_EPOCHS = 50
 AE_SEG_BATCH_SIZE = 8
 AE_SEG_LR = 1e-4
 AE_SEG_WEIGHT_DECAY = 1e-4
+
+LR_MIN = 1e-6
+
+# ═══════════════════════════════════════════════
+#  Evaluation Baseline
+# ═══════════════════════════════════════════════
+BASELINE_DICE = 0.4670
+BASELINE_PARAMS = 125_000_000
