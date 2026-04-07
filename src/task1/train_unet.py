@@ -47,6 +47,8 @@ def parse_args():
     p.add_argument("--data_root", type=str, default=config.DATASET_ROOT)
     p.add_argument("--use_class_weights", action="store_true",
                     help="Compute inverse-frequency class weights for CE")
+    p.add_argument("--lambda_dice", type=float, default=config.LAMBDA_DICE)
+    p.add_argument("--lambda_ce", type=float, default=config.LAMBDA_CE)
     p.add_argument("--checkpoint_dir", type=str, default=config.CHECKPOINT_DIR)
     p.add_argument("--results_dir", type=str, default=config.RESULTS_DIR)
     p.add_argument("--seed", type=int, default=config.SEED)
@@ -131,7 +133,9 @@ def main():
     print(f"UNet trainable parameters: {model.count_parameters():,}")
 
     # ── Loss / optimiser / scheduler ─────────
-    criterion = get_criterion(weight=ce_weight).to(device)
+    criterion = get_criterion(weight=ce_weight,
+                              lambda_dice=args.lambda_dice,
+                              lambda_ce=args.lambda_ce).to(device)
     optimizer = AdamW(model.parameters(), lr=args.lr,
                       weight_decay=args.weight_decay)
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=config.LR_MIN)

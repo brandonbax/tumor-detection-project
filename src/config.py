@@ -63,6 +63,9 @@ AE_SEG_WEIGHT_DECAY = 1e-4
 
 LR_MIN = 1e-6
 
+LAMBDA_DICE = 0.5
+LAMBDA_CE = 0.5
+
 # ═══════════════════════════════════════════════
 #  Evaluation Baseline
 # ═══════════════════════════════════════════════

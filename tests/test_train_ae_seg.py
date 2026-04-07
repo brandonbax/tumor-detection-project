@@ -78,7 +78,7 @@ class TestParseArgs:
         assert args.lr == config.AE_SEG_LR
         assert args.weight_decay == config.AE_SEG_WEIGHT_DECAY
         assert args.patch_size == config.PATCH_SIZE
-        assert args.features == [64, 128, 256, 512]
+        assert args.features == config.AE_FEATURES
         assert args.data_root == config.DATASET_ROOT
         assert args.use_class_weights is False
         assert args.checkpoint_dir == config.CHECKPOINT_DIR
@@ -308,6 +308,8 @@ class TestMain:
             features=FEATURES,
             data_root="fake",
             use_class_weights=False,
+            lambda_dice=config.LAMBDA_DICE,
+            lambda_ce=config.LAMBDA_CE,
             checkpoint_dir=ckpt_dir,
             results_dir=results_dir,
             seed=42,
@@ -350,6 +352,8 @@ class TestMain:
             features=FEATURES,
             data_root="fake",
             use_class_weights=False,
+            lambda_dice=config.LAMBDA_DICE,
+            lambda_ce=config.LAMBDA_CE,
             checkpoint_dir=ckpt_dir,
             results_dir=results_dir,
             seed=42,
@@ -387,6 +391,8 @@ class TestMain:
             features=FEATURES,
             data_root="fake",
             use_class_weights=False,
+            lambda_dice=config.LAMBDA_DICE,
+            lambda_ce=config.LAMBDA_CE,
             checkpoint_dir=str(tmp_path / "ckpt"),
             results_dir=str(tmp_path / "results"),
             seed=42,
@@ -422,6 +428,8 @@ class TestMain:
             features=FEATURES,
             data_root="fake",
             use_class_weights=False,
+            lambda_dice=config.LAMBDA_DICE,
+            lambda_ce=config.LAMBDA_CE,
             checkpoint_dir=ckpt_dir,
             results_dir=results_dir,
             seed=42,

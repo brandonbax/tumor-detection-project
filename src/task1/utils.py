@@ -201,8 +201,8 @@ class SegmentationCriterion(nn.Module):
     def __init__(self,
                  num_classes: int = config.NUM_CLASSES,
                  weight: Optional[torch.Tensor] = None,
-                 lambda_dice: float = 0.5,
-                 lambda_ce: float = 0.5):
+                 lambda_dice: float = config.LAMBDA_DICE,
+                 lambda_ce: float = config.LAMBDA_CE):
         super().__init__()
         self.loss = DiceCELoss(
             include_background=True,
@@ -223,8 +223,8 @@ class SegmentationCriterion(nn.Module):
 
 
 def get_criterion(weight: Optional[torch.Tensor] = None,
-                  lambda_dice: float = 0.5,
-                  lambda_ce: float = 0.5) -> SegmentationCriterion:
+                  lambda_dice: float = config.LAMBDA_DICE,
+                  lambda_ce: float = config.LAMBDA_CE) -> SegmentationCriterion:
     """
     Factory that returns a MONAI-backed Dice + CE criterion.
     """

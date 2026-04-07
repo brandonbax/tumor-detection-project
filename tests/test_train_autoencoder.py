@@ -84,7 +84,7 @@ class TestParseArgs:
         assert args.lr == config.AE_LR
         assert args.weight_decay == config.AE_WEIGHT_DECAY
         assert args.patch_size == config.PATCH_SIZE
-        assert args.features == [64, 128, 256, 512]
+        assert args.features == config.AE_FEATURES
         assert args.data_root == config.DATASET_ROOT
         assert args.checkpoint_dir == config.CHECKPOINT_DIR
         assert args.results_dir == config.RESULTS_DIR

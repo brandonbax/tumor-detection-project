@@ -34,6 +34,8 @@ def parse_args():
                     default=config.AE_FEATURES)
     p.add_argument("--data_root", type=str, default=config.DATASET_ROOT)
     p.add_argument("--use_class_weights", action="store_true")
+    p.add_argument("--lambda_dice", type=float, default=config.LAMBDA_DICE)
+    p.add_argument("--lambda_ce", type=float, default=config.LAMBDA_CE)
     p.add_argument("--checkpoint_dir", type=str, default=config.CHECKPOINT_DIR)
     p.add_argument("--results_dir", type=str, default=config.RESULTS_DIR)
     p.add_argument("--seed", type=int, default=config.SEED)
@@ -140,7 +142,9 @@ def main():
         print(f"  Class weights: {ce_weight.tolist()}")
 
     # ── Loss / optimiser / scheduler ─────────
-    criterion = get_criterion(weight=ce_weight).to(device)
+    criterion = get_criterion(weight=ce_weight,
+                              lambda_dice=args.lambda_dice,
+                              lambda_ce=args.lambda_ce).to(device)
     # Only optimise decoder parameters
     optimizer = AdamW(model.seg_decoder.parameters(), lr=args.lr,
                       weight_decay=args.weight_decay)
