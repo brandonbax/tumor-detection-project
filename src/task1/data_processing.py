@@ -12,6 +12,8 @@ import tifffile
 
 import config
 
+# Could probably use an alternative to rasterio, since its not particularly
+# made for medical imaging, but it works if the file format warnings are suppressed.
 warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
 
 # Specs say that all classes (even the background) other than tissue_tumor and tissue_stroma
@@ -136,6 +138,8 @@ def match_image_label_pairs(image_path: str, label_path: str) -> List[Tuple[str,
 
     return pairs
 
+# The dataset stats are used in the config file for normalisation.
+# If the dataset is changed, these stats should be updated.
 def compute_dataset_stats(image_dir: str) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute the mean and standard deviation of the dataset.

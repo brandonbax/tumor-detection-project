@@ -6,7 +6,8 @@ import config
 
 
 class ConvBlock(nn.Module):
-    """Residual block: two conv -> BN -> ReLU layers with a shortcut connection.
+    """
+    Residual block: two conv -> BN -> ReLU layers with a shortcut connection.
 
     When in_ch != out_ch a 1x1 convolution projects the input to match,
     otherwise the shortcut is an identity mapping.
@@ -38,7 +39,7 @@ class ConvBlock(nn.Module):
 
 
 class DownBlock(nn.Module):
-    """Max‑pool → ConvBlock."""
+    """Max-pool → ConvBlock."""
 
     def __init__(self, in_ch: int, out_ch: int):
         super().__init__()
@@ -51,8 +52,9 @@ class DownBlock(nn.Module):
 
 
 class AttentionGate(nn.Module):
-    """Attention gate that reweights encoder skip features using the
-    decoder gating signal (Oktay et al., 2018).
+    """
+    Attention gate that reweights encoder skip features using the
+    decoder gating signal.
 
     Produces a soft spatial attention map via additive attention:
         psi = sigmoid(W_psi( ReLU( W_g(g) + W_x(x) ) ))
@@ -181,22 +183,11 @@ class ASPP(nn.Module):
         return self.project(torch.cat(branches, dim=1))
 
 
-# ═══════════════════════════════════════════════
-#  1.  UNet
-# ═══════════════════════════════════════════════
-
 class UNet(nn.Module):
     """
-    Standard U-Net for multi-class segmentation.
-
-    Architecture
-    ------------
-    Encoder:  [64, 128, 256, 512, 1024]  (configurable via `features`)
-    Decoder:  mirrors the encoder with skip connections
-
-    Parameters count depends on `features`.
-        features=[64,128,256,512,1024] -> ~31 M params (default)
-        features=[32,64,128,256,512]   -> ~7.8 M params (lightweight)
+    U-Net for multi-class segmentation. Implements a number of improvements
+    over a standard U-Net, such as ASPP at the bottleneck and deep
+    supervision side outputs.
     """
 
     def __init__(self,
@@ -281,7 +272,7 @@ class AEEncoder(nn.Module):
     """
     Encoder half of the autoencoder.
     Downsamples the image through conv blocks + max-pooling, producing
-    multi-scale feature maps (returned for skip connections later).
+    multi-scale feature maps. Skips are returned but not actually used in the decoder.
     """
 
     def __init__(self,
@@ -300,7 +291,7 @@ class AEEncoder(nn.Module):
         self.features = features
 
     def forward(self, x):
-        """Returns bottleneck and list of skip features (high‑res first)."""
+        """Returns bottleneck and list of skip features (high-res first)."""
         skips = []
         x = self.inc(x)
         skips.append(x)
@@ -315,9 +306,10 @@ class AEEncoder(nn.Module):
 
 class AEDecoder(nn.Module):
     """
-    Decoder for image reconstruction (autoencoder pre‑training).
+    Decoder for image reconstruction (autoencoder pre-training).
     Mirrors the encoder, using transposed convolutions to upsample.
-    No skip connections during AE training.
+    Only used during AE pre-training and is discarded before the ae-seg
+    training (since that uses the frozen encoder weights).
     """
 
     def __init__(self,
@@ -372,17 +364,13 @@ class Autoencoder(nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 
-# ═══════════════════════════════════════════════
-#  3.  Segmentation decoder on frozen AE encoder
-# ═══════════════════════════════════════════════
-
 class SegDecoder(nn.Module):
     """
     Segmentation decoder for the frozen-encoder AE-Seg pipeline.
 
     Mirrors the UNet decoder structure (upsample → residual ConvBlock at
-    each stage, deep supervision side outputs) but **without** skip
-    connections or attention gates.  This forces all spatial information
+    each stage, deep supervision side outputs) but without skip
+    connections or attention gates. This forces all spatial information
     through the bottleneck, giving a fair test of pre-training quality.
     """
 
@@ -452,7 +440,7 @@ class AESegmentationModel(nn.Module):
     """
     Combines a frozen AEEncoder with a trainable SegDecoder.
 
-    The decoder does **not** use skip connections or attention gates,
+    The decoder does not use skip connections or attention gates,
     so all spatial information must pass through the bottleneck.
     This gives a fair evaluation of the pre-trained representation.
 

@@ -18,7 +18,7 @@ from task1.utils import (
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Pre‑train autoencoder")
+    p = argparse.ArgumentParser(description="Pre-train autoencoder")
     p.add_argument("--epochs", type=int, default=config.AE_EPOCHS)
     p.add_argument("--batch_size", type=int, default=config.AE_BATCH_SIZE)
     p.add_argument("--lr", type=float, default=config.AE_LR)
@@ -41,7 +41,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         images = images.to(device, non_blocking=True)
 
         # Target for reconstruction: un‑normalise to [0, 1]
-        # (the decoder outputs sigmoid → [0, 1])
+        # (the decoder outputs sigmoid -> [0, 1])
         with torch.no_grad():
             mean = torch.tensor(config.DATASET_MEAN,
                                 device=device).view(1, 3, 1, 1)
@@ -109,21 +109,21 @@ def main():
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     os.makedirs(args.results_dir, exist_ok=True)
 
-    # ── Data ─────────────────────────────────
+    # Data
     train_loader, val_loader = get_unlabelled_loaders(
         batch_size=args.batch_size, patch_size=args.patch_size)
 
-    # ── Model ────────────────────────────────
+    # Model
     model = Autoencoder(features=args.features).to(device)
     print(f"Autoencoder trainable parameters: {model.count_parameters():,}")
 
-    # ── Loss / optimiser / scheduler ─────────
+    # Loss / optimiser / scheduler
     criterion = nn.MSELoss()
     optimizer = AdamW(model.parameters(), lr=args.lr,
                       weight_decay=args.weight_decay)
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=config.LR_MIN)
 
-    # ── Training loop ────────────────────────
+    # Training loop
     best_loss = float("inf")
     train_losses, val_losses = [], []
 
@@ -155,9 +155,9 @@ def main():
                 "features": args.features,
                 "args": vars(args),
             }, ckpt_path)
-            print(f"  ✓ New best model saved (mse={best_loss:.6f})")
+            print(f"New best model saved (mse={best_loss:.6f})")
 
-    # ── Save loss curves ─────────────────────
+    # Save loss curves
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -174,9 +174,9 @@ def main():
     curve_path = os.path.join(args.results_dir, "ae_training_curves.png")
     plt.savefig(curve_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"Saved AE training curves → {curve_path}")
+    print(f"Saved AE training curves -> {curve_path}")
 
-    # ── Save reconstruction examples ─────────
+    # Save reconstruction examples
     model.eval()
     ckpt = torch.load(os.path.join(args.checkpoint_dir,
                                     "autoencoder_best.pth"),

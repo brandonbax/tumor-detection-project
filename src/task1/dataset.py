@@ -68,11 +68,6 @@ class UnlabelledImageDataset(Dataset):
             for f in os.listdir(image_dir)
             if f.lower().endswith(exts)
         ])
-        if not self.image_paths:
-            # Fallback: recursive glob
-            self.image_paths = sorted(
-                glob.glob(os.path.join(image_dir, "**", "*.tif"),
-                           recursive=True))
 
         self.transform = get_image_transforms(patch_size, is_train)
 
