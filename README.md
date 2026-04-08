@@ -20,7 +20,7 @@ python -m task1.run_task1 --use_class_weights --dampen_weights
 Weights are stored using git lfs, so if not already done so, git lfs must be enabled to download the weights:
 ```bash
 git lfs install
-git pull
+git lfs pull
 ```
 Then run:
 ```bash
