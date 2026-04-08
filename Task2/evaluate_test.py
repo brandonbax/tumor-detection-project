@@ -1,122 +1,64 @@
 """
-Task 2 — Test Set Evaluation
+evaluate_test.py
+----------------
+Evaluate all trained models on the official Task 2 test set (1,858 patches).
 
-Runs both trained models on Task2_Test_Set (1858 pre-made 100x100 patches).
-Labels are parsed from filenames, e.g.:
-  test_set_metastatic_roi_013_nuclei_tumor_<uuid>.npy -> nuclei_tumor
+Labels are inferred from filenames, e.g.:
+  test_set_metastatic_roi_013_nuclei_tumor_<uuid>.npy  →  nuclei_tumor
 
-Outputs: accuracy, precision, recall, F1 and confusion matrix for both approaches.
+Usage:
+  python Task2/evaluate_test.py
+  python Task2/evaluate_test.py --tta   # average over 4 flipped views
 """
-
+import argparse
 import json
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from torchvision import models, transforms
-from sklearn.metrics import classification_report, accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
-import matplotlib.pyplot as plt
-import seaborn as sns
-from pathlib import Path
+from torchvision import models
+from torch.utils.data import DataLoader
+from sklearn.metrics import classification_report, accuracy_score
 
-TEST_DIR   = Path(__file__).parent.parent / "Task2_Test_Set"
-CKPT_A     = Path(__file__).parent / "checkpoints_a" / "best_model.pth"
-CKPT_B     = Path(__file__).parent / "checkpoints_b" / "best_model_b.pth"
-ENCODER_B  = Path(__file__).parent / "checkpoints_b" / "supcon_encoder.pth"
-OUTPUT_DIR = Path(__file__).parent / "test_results"
+import config
+from augmentation import val_transforms
+from dataset import TestSetDataset
+from models import build_encoder, EncoderClassifier
+from utils import plot_confusion_matrix, metrics_dict
+
+OUTPUT_DIR = config.ROOT_DIR / "test_results"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-TARGET_CLASSES = ["nuclei_histiocyte", "nuclei_lymphocyte", "nuclei_tumor"]
 
-DEVICE = (
-    torch.device("mps")  if torch.backends.mps.is_available() else
-    torch.device("cuda") if torch.cuda.is_available()          else
-    torch.device("cpu")
-)
-print(f"Using device: {DEVICE}")
-
-val_transforms = transforms.Compose([
-    transforms.ToPILImage(),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-])
+def load_model_a():
+    m = models.efficientnet_b0(weights=None)
+    m.classifier[1] = nn.Linear(m.classifier[1].in_features, config.NUM_CLASSES)
+    m.load_state_dict(torch.load(config.CKPT_A_DIR / "best_model.pth",
+                                 map_location=config.DEVICE))
+    return m.to(config.DEVICE).eval()
 
 
-class TestSetDataset(Dataset):
-    def __init__(self, test_dir, class_to_idx, transform=None):
-        self.transform = transform
-        self.files, self.labels = [], []
-        for path in sorted(test_dir.glob("*.npy")):
-            for cls in class_to_idx:
-                if cls in path.stem:
-                    self.files.append(path)
-                    self.labels.append(class_to_idx[cls])
-                    break
-        print(f"  Found {len(self.files)} test patches")
-
-    def __len__(self):
-        return len(self.files)
-
-    def __getitem__(self, idx):
-        patch = np.load(self.files[idx])
-        if self.transform:
-            patch = self.transform(patch)
-        return patch, self.labels[idx]
-
-
-def load_model_a(num_classes):
-    model = models.efficientnet_b0(weights=None)
-    model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
-    model.load_state_dict(torch.load(CKPT_A, map_location=DEVICE))
-    return model.to(DEVICE).eval()
-
-
-def load_model_b(backbone_name, num_classes):
-    # backbone_name can be e.g. "efficientnet_b0" or "efficientnet_b0_unfrozen"
-    ckpt_dir   = Path(__file__).parent / f"checkpoints_b_{backbone_name}"
-    model_ckpt = ckpt_dir / "best_model_b.pth"
-
-    base = backbone_name.replace("_unfrozen_all", "").replace("_unfrozen", "").replace("_weighted", "")
-    if base == "resnet18":
-        m = models.resnet18(weights=None)
-        encoder = nn.Sequential(*list(m.children())[:-1])
-        feat_dim = 512
-    elif base == "resnet50":
-        m = models.resnet50(weights=None)
-        encoder = nn.Sequential(*list(m.children())[:-1])
-        feat_dim = 2048
-    elif base == "efficientnet_b0":
-        m = models.efficientnet_b0(weights=None)
-        encoder = nn.Sequential(m.features, nn.AdaptiveAvgPool2d(1))
-        feat_dim = 1280
-
-    class EncoderClassifier(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.encoder    = encoder
-            self.classifier = nn.Linear(feat_dim, num_classes)
-
-        def forward(self, x):
-            return self.classifier(self.encoder(x).flatten(1))
-
-    model = EncoderClassifier()
-    model.load_state_dict(torch.load(model_ckpt, map_location=DEVICE))
-    return model.to(DEVICE).eval()
+def load_model_b(variant: str):
+    """Load EncoderClassifier from checkpoints_b_<variant>/best_model_b.pth."""
+    ckpt = config.ROOT_DIR / f"checkpoints_b_{variant}" / "best_model_b.pth"
+    # Strip variant suffixes to find the base backbone architecture
+    base = variant.replace("_unfrozen_all", "").replace("_unfrozen", "").replace("_weighted", "")
+    encoder, feat_dim = build_encoder(base, pretrained=False)
+    model = EncoderClassifier(encoder, feat_dim, config.NUM_CLASSES)
+    model.load_state_dict(torch.load(ckpt, map_location=config.DEVICE))
+    return model.to(config.DEVICE).eval()
 
 
 @torch.no_grad()
 def run_inference(model, loader, tta=False):
-    """Run inference, optionally with test-time augmentation (TTA).
-    TTA averages softmax probabilities over 4 views: original + hflip + vflip + both.
-    """
+    """Predict on loader; with TTA averages logits over 4 flipped views."""
     all_preds, all_labels = [], []
     for imgs, labels in loader:
-        imgs = imgs.to(DEVICE)
+        imgs = imgs.to(config.DEVICE)
         if tta:
             logits  = model(imgs)
-            logits += model(torch.flip(imgs, [3]))           # horizontal flip
-            logits += model(torch.flip(imgs, [2]))           # vertical flip
-            logits += model(torch.flip(imgs, [2, 3]))        # both
+            logits += model(torch.flip(imgs, [3]))      # horizontal flip
+            logits += model(torch.flip(imgs, [2]))      # vertical flip
+            logits += model(torch.flip(imgs, [2, 3]))   # both
             preds   = logits.argmax(1).cpu().numpy()
         else:
             preds = model(imgs).argmax(1).cpu().numpy()
@@ -125,82 +67,63 @@ def run_inference(model, loader, tta=False):
     return np.array(all_preds), np.array(all_labels)
 
 
-def plot_confusion_matrix(preds, labels, class_names, title, save_path):
-    cm = confusion_matrix(labels, preds)
-    plt.figure(figsize=(6, 5))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-                xticklabels=[c.replace("nuclei_", "") for c in class_names],
-                yticklabels=[c.replace("nuclei_", "") for c in class_names])
-    plt.title(title); plt.ylabel("True"); plt.xlabel("Predicted")
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=150)
-    plt.close()
-    print(f"  Saved: {save_path}")
-
-
-def metrics_dict(preds, labels, class_names):
-    return {
-        "accuracy":           round(float(accuracy_score(labels, preds)), 4),
-        "macro_precision":    round(float(precision_score(labels, preds, average="macro", zero_division=0)), 4),
-        "macro_recall":       round(float(recall_score(labels, preds, average="macro", zero_division=0)), 4),
-        "macro_f1":           round(float(f1_score(labels, preds, average="macro", zero_division=0)), 4),
-        "per_class": {
-            name: {
-                "precision": round(float(precision_score(labels, preds, labels=[i], average="macro", zero_division=0)), 4),
-                "recall":    round(float(recall_score(labels, preds, labels=[i], average="macro", zero_division=0)), 4),
-                "f1":        round(float(f1_score(labels, preds, labels=[i], average="macro", zero_division=0)), 4),
-            }
-            for i, name in enumerate(class_names)
-        },
-    }
+def eval_and_record(model, loader, name, tta, tta_suffix):
+    """Run inference, print report, save confusion matrix, return metrics dict."""
+    preds, labels = run_inference(model, loader, tta=tta)
+    print(classification_report(labels, preds,
+                                target_names=config.TARGET_CLASSES, digits=4))
+    print(f"Overall accuracy: {accuracy_score(labels, preds):.4f}")
+    plot_confusion_matrix(
+        preds, labels, config.TARGET_CLASSES,
+        title=f"{name}{' (TTA)' if tta else ''} — Test Set",
+        save_path=OUTPUT_DIR / f"confusion_matrix_{name}{tta_suffix}.png",
+    )
+    return metrics_dict(preds, labels, config.TARGET_CLASSES)
 
 
 def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--tta", action="store_true", help="Enable test-time augmentation")
+    parser = argparse.ArgumentParser(description="Test set evaluation")
+    parser.add_argument("--tta", action="store_true",
+                        help="Test-time augmentation: average 4 flipped views")
     args = parser.parse_args()
 
-    class_to_idx = {cls: i for i, cls in enumerate(TARGET_CLASSES)}
-    loader = DataLoader(
-        TestSetDataset(TEST_DIR, class_to_idx, val_transforms),
-        batch_size=64, shuffle=False, num_workers=2, pin_memory=True
-    )
     tta_suffix = "_tta" if args.tta else ""
     if args.tta:
-        print("Test-time augmentation enabled (4 views: orig + hflip + vflip + both)")
+        print("TTA enabled: orig + hflip + vflip + both")
+
+    loader = DataLoader(
+        TestSetDataset(transform=val_transforms),
+        batch_size=64, shuffle=False, num_workers=2, pin_memory=True,
+    )
 
     summary = {}
 
-    print("\n── Approach A (EfficientNet-B0, weighted loss) ──")
-    preds_a, lbls = run_inference(load_model_a(len(TARGET_CLASSES)), loader, tta=args.tta)
-    print(classification_report(lbls, preds_a, target_names=TARGET_CLASSES, digits=4))
-    print(f"Overall accuracy: {accuracy_score(lbls, preds_a):.4f}")
-    plot_confusion_matrix(preds_a, lbls, TARGET_CLASSES,
-                          f"Approach A — Test Set{' (TTA)' if args.tta else ''}",
-                          OUTPUT_DIR / f"confusion_matrix_a{tta_suffix}.png")
-    summary[f"approach_a{tta_suffix}"] = metrics_dict(preds_a, lbls, TARGET_CLASSES)
+    print("\n── Approach A (EfficientNet-B0, weighted CE) ──")
+    summary[f"approach_a{tta_suffix}"] = eval_and_record(
+        load_model_a(), loader, "approach_a", args.tta, tta_suffix)
 
-    for backbone in ["resnet18", "resnet50", "efficientnet_b0",
-                     "efficientnet_b0_unfrozen", "efficientnet_b0_unfrozen_weighted",
-                     "efficientnet_b0_unfrozen_all"]:
-        ckpt = Path(__file__).parent / f"checkpoints_b_{backbone}" / "best_model_b.pth"
+    b_variants = [
+        "resnet18",
+        "resnet50",
+        "efficientnet_b0",
+        "efficientnet_b0_unfrozen",
+        "efficientnet_b0_unfrozen_weighted",
+        "efficientnet_b0_unfrozen_all",
+    ]
+    for variant in b_variants:
+        ckpt = config.ROOT_DIR / f"checkpoints_b_{variant}" / "best_model_b.pth"
         if not ckpt.exists():
-            print(f"\n── Approach B ({backbone}) — checkpoint not found, skipping ──")
+            print(f"\n── Approach B ({variant}) — checkpoint not found, skipping ──")
             continue
-        print(f"\n── Approach B SupCon ({backbone}){' + TTA' if args.tta else ''} ──")
-        preds_b, _ = run_inference(load_model_b(backbone, len(TARGET_CLASSES)), loader, tta=args.tta)
-        print(classification_report(lbls, preds_b, target_names=TARGET_CLASSES, digits=4))
-        print(f"Overall accuracy: {accuracy_score(lbls, preds_b):.4f}")
-        plot_confusion_matrix(preds_b, lbls, TARGET_CLASSES,
-                              f"Approach B {backbone}{' (TTA)' if args.tta else ''} — Test Set",
-                              OUTPUT_DIR / f"confusion_matrix_b_{backbone}{tta_suffix}.png")
-        summary[f"approach_b_{backbone}{tta_suffix}"] = metrics_dict(preds_b, lbls, TARGET_CLASSES)
+        print(f"\n── Approach B SupCon ({variant}) ──")
+        summary[f"approach_b_{variant}{tta_suffix}"] = eval_and_record(
+            load_model_b(variant), loader, f"approach_b_{variant}",
+            args.tta, tta_suffix)
 
-    summary_path = OUTPUT_DIR / f"results_summary{tta_suffix}.json"
-    with open(summary_path, "w") as f:
+    out = OUTPUT_DIR / f"results_summary{tta_suffix}.json"
+    with open(out, "w") as f:
         json.dump(summary, f, indent=2)
-    print(f"\nResults saved to {summary_path}")
+    print(f"\nAll results saved to {out}")
 
 
 if __name__ == "__main__":
