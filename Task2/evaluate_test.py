@@ -98,7 +98,7 @@ def main():
 
     summary = {}
 
-    print("\n── Approach A (EfficientNet-B0, weighted CE) ──")
+    print("\nApproach A (EfficientNet-B0, weighted CE)")
     summary[f"approach_a{tta_suffix}"] = eval_and_record(
         load_model_a(), loader, "approach_a", args.tta, tta_suffix)
 
@@ -113,9 +113,9 @@ def main():
     for variant in b_variants:
         ckpt = config.ROOT_DIR / f"checkpoints_b_{variant}" / "best_model_b.pth"
         if not ckpt.exists():
-            print(f"\n── Approach B ({variant}) — checkpoint not found, skipping ──")
+            print(f"\nApproach B ({variant}) - checkpoint not found, skipping")
             continue
-        print(f"\n── Approach B SupCon ({variant}) ──")
+        print(f"\nApproach B ({variant})")
         summary[f"approach_b_{variant}{tta_suffix}"] = eval_and_record(
             load_model_b(variant), loader, f"approach_b_{variant}",
             args.tta, tta_suffix)

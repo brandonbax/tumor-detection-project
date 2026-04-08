@@ -168,7 +168,7 @@ def main():
                          out_dir / f"training_curves_b_{args.backbone}.png",
                          title_prefix=f"Approach B ({args.backbone}{run_suffix})")
 
-    print("\n── Final Evaluation ──")
+    print("\nFinal Evaluation")
     model.load_state_dict(
         torch.load(out_dir / "best_model_b.pth", map_location=config.DEVICE))
     _, _, val_preds, val_labels = evaluate(model, val_loader, criterion)
@@ -176,7 +176,7 @@ def main():
                                 target_names=config.TARGET_CLASSES, digits=4))
     print(f"Overall accuracy: {accuracy_score(val_labels, val_preds):.4f}")
 
-    print("\n── Latent Space Evaluation ──")
+    print("\nLatent Space Evaluation")
     feats, lbls = extract_features(encoder, val_loader)
     sil  = silhouette_score(feats, lbls, sample_size=2000, random_state=42)
     mode = ("unfrozen_all" if args.unfreeze_all else

@@ -105,7 +105,7 @@ def main():
                          config.CKPT_A_DIR / "training_curves_a.png",
                          title_prefix="Approach A (EfficientNet-B0)")
 
-    print("\n── Final Evaluation (best checkpoint) ──")
+    print("\nFinal Evaluation (best checkpoint)")
     model.load_state_dict(
         torch.load(config.CKPT_A_DIR / "best_model.pth", map_location=config.DEVICE))
     _, _, val_preds, val_labels = evaluate(model, val_loader, criterion)
