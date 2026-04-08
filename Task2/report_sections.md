@@ -156,18 +156,23 @@ Histiocyte is the limiting class — caps the balanced train set at 2500/class.
 - Unfreezing `features[7]` + `features[8]` (last MBConv block + head conv) with differential LR (encoder: 1e-5, head: 1e-3)
 - +1.76% over frozen variant; silhouette improves from -0.0190 → -0.0141
 
-### Backbone + freeze ablation summary
+### Backbone + freeze ablation summary (final run)
 | Backbone | Freeze | Val Acc | Test Acc | Silhouette |
 |---|---|---|---|---|
-| ResNet-18 | frozen | 0.6443 | 0.6416 | -0.0270 |
-| ResNet-50 | frozen | 0.6510 | 0.6351 | -0.0348 |
-| EfficientNet-B0 | frozen | 0.6714 | 0.6642 | -0.0190 |
-| **EfficientNet-B0** | **last block unfrozen** | **0.6890** | **0.6755** | **-0.0141** |
-| EfficientNet-B0 | unfrozen + weighted | 0.6857 | 0.6561 | -0.0156 |
+| ResNet-18 | frozen | 0.647 | 0.643 | +0.029 |
+| ResNet-50 | frozen | 0.656 | 0.635 | +0.044 |
+| EfficientNet-B0 | frozen | 0.679 | 0.679 | -0.025 |
+| **EfficientNet-B0** | **last block unfrozen** | **0.687** | **0.695** | **-0.025** |
+| EfficientNet-B0 | unfrozen + weighted | 0.687 | 0.662 | -0.025 |
+| EfficientNet-B0 | full encoder unfrozen | 0.687 | 0.681 | -0.025 |
+| Approach A (EfficientNet-B0) | full fine-tune | 0.751 | **0.713** | — |
 
-**Winner: EfficientNet-B0 with last block unfrozen** — best val and test accuracy, best silhouette.
+**Winner Approach B: EfficientNet-B0 with last block unfrozen** — best test accuracy (0.695).
+**Overall winner: Approach A** — 0.713 test accuracy, beats 0.7083 baseline by +0.4 pp.
 
-**Weighted loss hurt Approach B** (test 0.6755 → 0.6561): boosted histiocyte recall (0.53→0.70) but collapsed lymphocyte recall (0.67→0.52) — the contrastive encoder represents histiocyte and lymphocyte in overlapping space, so pushing histiocyte up pulls lymphocyte predictions down. Unlike Approach A where the full encoder can compensate, the partially frozen encoder cannot rebalance.
+**Weighted loss hurt Approach B** (test 0.695 → 0.662): all silhouettes near -0.025, meaning histiocyte/lymphocyte overlap in feature space. Upweighting histiocyte collapses lymphocyte recall without encoder-level reorganisation.
+
+**Full unfreeze** matched partial on val (0.687) but generalised worse on test (0.681 vs 0.695) — SupCon representations provide useful regularisation when mostly frozen.
 
 ---
 
