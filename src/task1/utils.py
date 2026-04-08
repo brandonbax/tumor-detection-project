@@ -355,7 +355,11 @@ def save_prediction_grid(images: torch.Tensor,
         axes[i, 2].set_title("Prediction")
         axes[i, 2].axis("off")
 
-    plt.tight_layout()
+    import matplotlib.patches as mpatches
+    patches = [mpatches.Patch(color=np.array(PALETTE[i])/255.0, label=config.CLASS_NAMES[i]) 
+               for i in range(len(PALETTE))]
+    fig.legend(handles=patches, loc='lower center', ncol=len(PALETTE), bbox_to_anchor=(0.5, 0.0))
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
     os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
@@ -536,7 +540,11 @@ def save_model_comparison_grid(images: torch.Tensor,
             axes[i, 2 + j].set_title(name)
             axes[i, 2 + j].axis("off")
 
-    plt.tight_layout()
+    import matplotlib.patches as mpatches
+    patches = [mpatches.Patch(color=np.array(PALETTE[i])/255.0, label=config.CLASS_NAMES[i]) 
+               for i in range(len(PALETTE))]
+    fig.legend(handles=patches, loc='lower center', ncol=len(PALETTE), bbox_to_anchor=(0.5, 0.0))
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
     os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()

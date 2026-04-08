@@ -189,21 +189,97 @@ def main():
         for m in models.values():
             m.eval()
 
+        print("Finding best and worst predictions for extreme comparison...")
+        best_score = -1.0
+        best_data = None
+        worst_score = 2.0
+        worst_data = None
+        second_worst_score = 2.0
+        second_worst_data = None
+        saved_first_batch = False
+
         with torch.no_grad():
-            for images, masks in test_loader:
+            for images, masks in tqdm(test_loader, desc="  Generative Visualisations"):
                 images = images.to(device)
                 masks = masks.to(device)
                 model_preds = {
                     name: m(images).argmax(dim=1)
                     for name, m in models.items()
                 }
-                save_model_comparison_grid(
-                    images, masks, model_preds,
-                    os.path.join(args.results_dir,
-                                 "model_comparison.png"),
-                    num_samples=6,
-                )
-                break
+
+                if not saved_first_batch:
+                    save_model_comparison_grid(
+                        images, masks, model_preds,
+                        os.path.join(args.results_dir,
+                                     "model_comparison.png"),
+                        num_samples=6,
+                    )
+                    saved_first_batch = True
+
+                # Evaluate per image to find extremes
+                for i in range(images.size(0)):
+                    img_i = images[i:i+1] # keep batch dim
+                    mask_i = masks[i:i+1] # keep batch dim
+                    preds_i = {name: p[i:i+1] for name, p in model_preds.items()}
+                    
+                    # Calculate unique classes for the top image condition
+                    num_unique_classes = len(torch.unique(mask_i))
+                    has_tissue = (mask_i > 0).any()
+                    
+                    if not has_tissue:
+                        continue
+                        
+                    avg_image_dice = 0.0
+                    for name, p_i in preds_i.items():
+                        model_dice = 0.0
+                        present_classes = 0
+                        for c in range(config.NUM_CLASSES):
+                            gt_c = (mask_i == c)
+                            if not gt_c.any():
+                                continue
+                            pred_c = (p_i == c)
+                            tp = (pred_c & gt_c).sum().float()
+                            fp = (pred_c & ~gt_c).sum().float()
+                            fn = (~pred_c & gt_c).sum().float()
+                            denom = 2.0 * tp + fp + fn
+                            dice_c = (2.0 * tp / denom) if denom > 0 else 0.0
+                            model_dice += dice_c
+                            present_classes += 1
+                        avg_image_dice += (model_dice / present_classes).item()
+                        
+                    avg_image_dice /= len(preds_i)
+                    
+                    # For top image: must have more than 1 class
+                    if num_unique_classes > 1 and avg_image_dice > best_score:
+                        best_score = avg_image_dice
+                        best_data = (img_i, mask_i, preds_i)
+                        
+                    # For bottom image: track worst and second worst
+                    if avg_image_dice < worst_score:
+                        # old worst becomes second worst
+                        second_worst_score = worst_score
+                        second_worst_data = worst_data
+                        
+                        worst_score = avg_image_dice
+                        worst_data = (img_i, mask_i, preds_i)
+                    elif avg_image_dice < second_worst_score:
+                        second_worst_score = avg_image_dice
+                        second_worst_data = (img_i, mask_i, preds_i)
+
+        final_worst_data = second_worst_data if second_worst_data is not None else worst_data
+
+        if best_data is not None and final_worst_data is not None:
+            print(f"  Selected top image (score {best_score:.4f}) and bottom image (score {second_worst_score:.4f}, excluded abs worst {worst_score:.4f})")
+            
+            ext_images = torch.cat([best_data[0], final_worst_data[0]], dim=0)
+            ext_masks = torch.cat([best_data[1], final_worst_data[1]], dim=0)
+            ext_preds = {name: torch.cat([best_data[2][name], final_worst_data[2][name]], dim=0) for name in models.keys()}
+            
+            save_model_comparison_grid(
+                ext_images, ext_masks, ext_preds,
+                os.path.join(args.results_dir, "extreme_model_comparison.png"),
+                num_samples=2,
+            )
 
         save_metrics_comparison_chart(
             all_results,
