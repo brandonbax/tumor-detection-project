@@ -14,9 +14,9 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
 import config
-from augmentation import supcon_transforms
-from dataset import SupConDataset
-from models import SupConModel, supcon_loss
+from transforms import supcon_transforms
+from patches import SupConDataset
+from encoders import SupConModel, supcon_loss
 
 
 def train_one_epoch(model, loader, optimizer):

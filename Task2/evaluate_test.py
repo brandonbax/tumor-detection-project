@@ -20,10 +20,10 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import classification_report, accuracy_score
 
 import config
-from augmentation import val_transforms
-from dataset import TestSetDataset
-from models import build_encoder, EncoderClassifier
-from utils import plot_confusion_matrix, metrics_dict
+from transforms import val_transforms
+from patches import TestSetDataset
+from encoders import build_encoder, EncoderClassifier
+from metrics import plot_confusion_matrix, metrics_dict
 
 OUTPUT_DIR = config.ROOT_DIR / "test_results"
 OUTPUT_DIR.mkdir(exist_ok=True)

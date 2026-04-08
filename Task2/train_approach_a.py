@@ -16,9 +16,9 @@ from torchvision import models
 from sklearn.metrics import classification_report, accuracy_score
 
 import config
-from augmentation import train_transforms, val_transforms
-from dataset import get_loaders
-from utils import save_training_curves
+from transforms import train_transforms, val_transforms
+from patches import get_loaders
+from metrics import save_training_curves
 
 
 def build_model():

@@ -20,10 +20,10 @@ import torch.nn as nn
 from sklearn.metrics import classification_report, accuracy_score, silhouette_score
 
 import config
-from augmentation import train_transforms, val_transforms
-from dataset import get_loaders
-from models import build_encoder, EncoderClassifier
-from utils import save_training_curves, extract_features, plot_tsne
+from transforms import train_transforms, val_transforms
+from patches import get_loaders
+from encoders import build_encoder, EncoderClassifier
+from metrics import save_training_curves, extract_features, plot_tsne
 
 
 def load_encoder(backbone, unfreeze, unfreeze_all):
