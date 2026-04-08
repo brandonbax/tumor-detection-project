@@ -1,0 +1,140 @@
+{
+  "approach_a": {
+    "accuracy": 0.7126,
+    "macro_precision": 0.7035,
+    "macro_recall": 0.7042,
+    "macro_f1": 0.7008,
+    "per_class": {
+      "nuclei_histiocyte": {
+        "precision": 0.5436,
+        "recall": 0.6397,
+        "f1": 0.5878
+      },
+      "nuclei_lymphocyte": {
+        "precision": 0.801,
+        "recall": 0.6786,
+        "f1": 0.7347
+      },
+      "nuclei_tumor": {
+        "precision": 0.7658,
+        "recall": 0.7943,
+        "f1": 0.7798
+      }
+    }
+  },
+  "approach_b_resnet50": {
+    "accuracy": 0.6351,
+    "macro_precision": 0.609,
+    "macro_recall": 0.6057,
+    "macro_f1": 0.6044,
+    "per_class": {
+      "nuclei_histiocyte": {
+        "precision": 0.4874,
+        "recall": 0.3799,
+        "f1": 0.427
+      },
+      "nuclei_lymphocyte": {
+        "precision": 0.6575,
+        "recall": 0.6829,
+        "f1": 0.6699
+      },
+      "nuclei_tumor": {
+        "precision": 0.6822,
+        "recall": 0.7543,
+        "f1": 0.7164
+      }
+    }
+  },
+  "approach_b_efficientnet_b0": {
+    "accuracy": 0.6792,
+    "macro_precision": 0.6526,
+    "macro_recall": 0.6508,
+    "macro_f1": 0.6499,
+    "per_class": {
+      "nuclei_histiocyte": {
+        "precision": 0.5156,
+        "recall": 0.4323,
+        "f1": 0.4703
+      },
+      "nuclei_lymphocyte": {
+        "precision": 0.7055,
+        "recall": 0.7086,
+        "f1": 0.7071
+      },
+      "nuclei_tumor": {
+        "precision": 0.7367,
+        "recall": 0.8114,
+        "f1": 0.7723
+      }
+    }
+  },
+  "approach_b_efficientnet_b0_unfrozen": {
+    "accuracy": 0.6948,
+    "macro_precision": 0.6704,
+    "macro_recall": 0.6666,
+    "macro_f1": 0.6655,
+    "per_class": {
+      "nuclei_histiocyte": {
+        "precision": 0.545,
+        "recall": 0.4498,
+        "f1": 0.4928
+      },
+      "nuclei_lymphocyte": {
+        "precision": 0.7336,
+        "recall": 0.7043,
+        "f1": 0.7187
+      },
+      "nuclei_tumor": {
+        "precision": 0.7327,
+        "recall": 0.8457,
+        "f1": 0.7851
+      }
+    }
+  },
+  "approach_b_efficientnet_b0_unfrozen_weighted": {
+    "accuracy": 0.662,
+    "macro_precision": 0.6729,
+    "macro_recall": 0.6652,
+    "macro_f1": 0.6554,
+    "per_class": {
+      "nuclei_histiocyte": {
+        "precision": 0.4675,
+        "recall": 0.69,
+        "f1": 0.5573
+      },
+      "nuclei_lymphocyte": {
+        "precision": 0.7907,
+        "recall": 0.5614,
+        "f1": 0.6566
+      },
+      "nuclei_tumor": {
+        "precision": 0.7606,
+        "recall": 0.7443,
+        "f1": 0.7523
+      }
+    }
+  },
+  "approach_b_efficientnet_b0_unfrozen_all": {
+    "accuracy": 0.6808,
+    "macro_precision": 0.6575,
+    "macro_recall": 0.6557,
+    "macro_f1": 0.6545,
+    "per_class": {
+      "nuclei_histiocyte": {
+        "precision": 0.5072,
+        "recall": 0.4629,
+        "f1": 0.484
+      },
+      "nuclei_lymphocyte": {
+        "precision": 0.7449,
+        "recall": 0.6757,
+        "f1": 0.7086
+      },
+      "nuclei_tumor": {
+        "precision": 0.7205,
+        "recall": 0.8286,
+        "f1": 0.7708
+      }
+    }
+  }
+}

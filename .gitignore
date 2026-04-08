@@ -6,7 +6,8 @@ Task2/checkpoints_b/
 Task2/checkpoints_b_resnet50/
 Task2/checkpoints_b_efficientnet_b0_unfrozen/
 Task2/checkpoints_b_efficientnet_b0_unfrozen_weighted/
-Task2/test_results/
+Task2/test_results/*.png
+Task2/test_results/*_tta.json
 Task2/approach_a_improved/
 # allow these three via LFS:
 !Task2/checkpoints_a/
