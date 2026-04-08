@@ -58,3 +58,22 @@ python Task2/train_approach_b.py --backbone efficientnet_b0 --unfreeze_all
 python Task2/evaluate_test.py
 ```
 Saves results to `Task2/test_results/results_summary.json` and confusion matrix plots.
+
+---
+
+## Pre-trained model weights
+
+The final checkpoints are stored in this repo using git LFS. To download them after cloning:
+
+```bash
+git lfs install
+git lfs pull
+```
+
+This will download:
+- `Task2/checkpoints_a/best_model.pth` — Approach A final model
+- `Task2/checkpoints_b_efficientnet_b0/supcon_encoder.pth` — SupCon pre-trained encoder
+- `Task2/checkpoints_b_efficientnet_b0/best_model_b.pth` — Approach B frozen head
+- `Task2/checkpoints_b_efficientnet_b0_unfrozen_all/best_model_b.pth` — Approach B full fine-tune
+
+If you just want to evaluate without retraining, download the weights then run `python Task2/evaluate_test.py` directly.
