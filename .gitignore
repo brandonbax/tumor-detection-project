@@ -1,12 +1,17 @@
 task2_dataset/
 Task2_Test_Set/
 
-# model checkpoints — kept local only, not committed
-Task2/checkpoints_a/
+# model checkpoints — most ignored, key finals tracked via git LFS
 Task2/checkpoints_b/
-Task2/checkpoints_b_*/
+Task2/checkpoints_b_resnet50/
+Task2/checkpoints_b_efficientnet_b0_unfrozen/
+Task2/checkpoints_b_efficientnet_b0_unfrozen_weighted/
 Task2/test_results/
 Task2/approach_a_improved/
+# allow these three via LFS:
+!Task2/checkpoints_a/
+!Task2/checkpoints_b_efficientnet_b0/
+!Task2/checkpoints_b_efficientnet_b0_unfrozen_all/
 
 Tutorials/
 
