@@ -34,13 +34,13 @@ def train_one_epoch(model, loader, criterion, optimizer):
     for imgs, labels in loader:
         imgs, labels = imgs.to(config.DEVICE), labels.to(config.DEVICE)
         optimizer.zero_grad()
-        out  = model(imgs)
+        out = model(imgs)
         loss = criterion(out, labels)
         loss.backward()
         optimizer.step()
         total_loss += loss.item() * imgs.size(0)
-        correct    += (out.argmax(1) == labels).sum().item()
-        total      += imgs.size(0)
+        correct += (out.argmax(1) == labels).sum().item()
+        total += imgs.size(0)
     return total_loss / total, correct / total
 
 
@@ -55,8 +55,8 @@ def evaluate(model, loader, criterion):
         loss  = criterion(out, labels)
         preds = out.argmax(1)
         total_loss += loss.item() * imgs.size(0)
-        correct    += (preds == labels).sum().item()
-        total      += imgs.size(0)
+        correct += (preds == labels).sum().item()
+        total += imgs.size(0)
         all_preds.extend(preds.cpu().numpy())
         all_labels.extend(labels.cpu().numpy())
     return total_loss / total, correct / total, all_preds, all_labels
@@ -70,8 +70,8 @@ def main():
     train_loader, val_loader = get_loaders(
         config.A_BATCH_SIZE, train_transforms, val_transforms)
 
-    model     = build_model()
-    weights   = torch.tensor(config.A_CLASS_WEIGHTS, device=config.DEVICE)
+    model = build_model()
+    weights = torch.tensor(config.A_CLASS_WEIGHTS, device=config.DEVICE)
     criterion = nn.CrossEntropyLoss(weight=weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.A_LR)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(

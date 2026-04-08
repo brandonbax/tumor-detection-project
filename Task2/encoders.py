@@ -1,12 +1,6 @@
 """
-models.py
----------
-Model building blocks for Task 2.
-
-  build_encoder       — ImageNet-pretrained encoder (ResNet-18/50 or EfficientNet-B0)
-  SupConModel         — encoder + MLP projection head for SupCon pre-training
-  EncoderClassifier   — frozen/unfrozen encoder + linear head for classification
-  supcon_loss         — Supervised Contrastive Loss (Khosla et al., 2020)
+encoders.py - model definitions for Task 2.
+Encoder backbones, SupCon model, and the supervised contrastive loss.
 """
 import torch
 import torch.nn as nn
@@ -64,7 +58,7 @@ class EncoderClassifier(nn.Module):
 
     def __init__(self, encoder: nn.Module, feat_dim: int, num_classes: int):
         super().__init__()
-        self.encoder    = encoder
+        self.encoder = encoder
         self.classifier = nn.Linear(feat_dim, num_classes)
 
     def forward(self, x):

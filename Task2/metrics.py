@@ -1,7 +1,5 @@
 """
-utils.py
---------
-Shared helpers for Task 2: plotting, metrics, and feature extraction.
+metrics.py - plotting and evaluation helpers for Task 2.
 """
 import json
 import numpy as np

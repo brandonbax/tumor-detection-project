@@ -23,9 +23,9 @@ def train_one_epoch(model, loader, optimizer):
     model.train()
     total_loss = 0.0
     for view1, view2, labels in loader:
-        imgs   = torch.cat([view1, view2]).to(config.DEVICE)
+        imgs = torch.cat([view1, view2]).to(config.DEVICE)
         labels = torch.cat([labels, labels]).to(config.DEVICE)
-        loss   = supcon_loss(model(imgs), labels)
+        loss = supcon_loss(model(imgs), labels)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -53,10 +53,9 @@ def main():
     print(f"Contrastive set: {len(loader.dataset):,} patches, "
           f"{len(loader)} batches/epoch")
 
-    model     = SupConModel(args.backbone).to(config.DEVICE)
+    model = SupConModel(args.backbone).to(config.DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.SC_LR)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=config.SC_EPOCHS)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.SC_EPOCHS)
 
     best_loss, no_improve, history = float("inf"), 0, []
 

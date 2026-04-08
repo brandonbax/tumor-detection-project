@@ -1,11 +1,5 @@
 """
-dataset.py
-----------
-Dataset classes and DataLoader factories for Task 2.
-
-  NucleiDataset   — balanced labelled patches from .npy files (train / val)
-  SupConDataset   — contrastive set; returns two augmented views per patch
-  TestSetDataset  — pre-made 100×100 test patches; label parsed from filename
+patches.py - dataset classes for Task 2 nuclei patches.
 """
 import numpy as np
 from pathlib import Path
