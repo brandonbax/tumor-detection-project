@@ -26,3 +26,24 @@ Then run:
 ```bash
 python -m task1.evaluate --unet_ckpt src/task1/checkpoints/unet_final.pth --ae_seg_ckpt src/task1/checkpoints/ae_seg_final.pth
 ```
+
+---
+
+## Task 2
+
+For Task 2 (nuclei classification) setup, training scripts, evaluation, and model weights, see the dedicated readme:
+
+👉 [Task2/Readme.md](Task2/Readme.md)
+
+Quick start:
+```bash
+# Get a GPU node and set up environment
+srun -p Teaching --nodelist=saxa --gres=gpu:1g.18gb:1 --cpus-per-task=2 --mem=128G --pty bash
+conda activate cv
+pip install -r Task2/requirements.txt
+
+# Prepare dataset first
+python Task2/dataset_preparation.py
+
+# Then train or evaluate — see Task2/Readme.md for full details
+```
