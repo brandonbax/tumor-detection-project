@@ -1,0 +1,39 @@
+{
+  "UNet": {
+    "pixel_accuracy": 0.7951889038085938,
+    "mean_dice": 0.5845791697502136,
+    "mean_iou": 0.4893871247768402,
+    "dice_Other": 0.3013775944709778,
+    "iou_Other": 0.20165318250656128,
+    "precision_Other": 0.37216103076934814,
+    "recall_Other": 0.25907859206199646,
+    "dice_Tumor": 0.8355147838592529,
+    "iou_Tumor": 0.7691031098365784,
+    "precision_Tumor": 0.8974835276603699,
+    "recall_Tumor": 0.8555153608322144,
+    "dice_Stroma": 0.6168451905250549,
+    "iou_Stroma": 0.4974049925804138,
+    "precision_Stroma": 0.535381019115448,
+    "recall_Stroma": 0.6920063495635986,
+    "trainable_params": 69322036
+  },
+  "AE-Seg": {
+    "pixel_accuracy": 0.6389589905738831,
+    "mean_dice": 0.3909030258655548,
+    "mean_iou": 0.31307318806648254,
+    "dice_Other": 0.049076590687036514,
+    "iou_Other": 0.028407305479049683,
+    "precision_Other": 0.07784232497215271,
+    "recall_Other": 0.03418600186705589,
+    "dice_Tumor": 0.6710930466651917,
+    "iou_Tumor": 0.5765351057052612,
+    "precision_Tumor": 0.8832761645317078,
+    "recall_Tumor": 0.6722515821456909,
+    "dice_Stroma": 0.45253944396972656,
+    "iou_Stroma": 0.3342771828174591,
+    "precision_Stroma": 0.3058073818683624,
+    "recall_Stroma": 0.6732887029647827,
+    "trainable_params_decoder": 45768140,
+    "total_params": 65315788
+  }
+}

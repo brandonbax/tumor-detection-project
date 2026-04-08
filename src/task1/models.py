@@ -1,0 +1,510 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+import config
+
+
+class ConvBlock(nn.Module):
+    """
+    Residual block: two conv -> BN -> ReLU layers with a shortcut connection.
+
+    When in_ch != out_ch a 1x1 convolution projects the input to match,
+    otherwise the shortcut is an identity mapping.
+    """
+
+    def __init__(self, in_ch: int, out_ch: int):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_ch)
+        self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_ch)
+        self.relu = nn.ReLU(inplace=True)
+
+        # 1x1 projection shortcut when channel dimensions differ
+        if in_ch != out_ch:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 1, bias=False),
+                nn.BatchNorm2d(out_ch),
+            )
+        else:
+            self.shortcut = nn.Identity()
+
+    def forward(self, x):
+        identity = self.shortcut(x)
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out = self.relu(out + identity)
+        return out
+
+
+class DownBlock(nn.Module):
+    """Max-pool → ConvBlock."""
+
+    def __init__(self, in_ch: int, out_ch: int):
+        super().__init__()
+        self.pool = nn.MaxPool2d(2)
+        self.conv = ConvBlock(in_ch, out_ch)
+
+    def forward(self, x):
+        x = self.pool(x)
+        return self.conv(x)
+
+
+class AttentionGate(nn.Module):
+    """
+    Attention gate that reweights encoder skip features using the
+    decoder gating signal.
+
+    Produces a soft spatial attention map via additive attention:
+        psi = sigmoid(W_psi( ReLU( W_g(g) + W_x(x) ) ))
+        output = x * psi
+    """
+
+    def __init__(self, gate_ch: int, skip_ch: int, inter_ch: int = None):
+        super().__init__()
+        if inter_ch is None:
+            inter_ch = skip_ch // 2 or 1
+
+        self.W_g = nn.Sequential(
+            nn.Conv2d(gate_ch, inter_ch, 1, bias=False),
+            nn.BatchNorm2d(inter_ch),
+        )
+        self.W_x = nn.Sequential(
+            nn.Conv2d(skip_ch, inter_ch, 1, bias=False),
+            nn.BatchNorm2d(inter_ch),
+        )
+        self.psi = nn.Sequential(
+            nn.Conv2d(inter_ch, 1, 1, bias=False),
+            nn.BatchNorm2d(1),
+            nn.Sigmoid(),
+        )
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, g, skip):
+        """
+        Parameters
+        ----------
+        g    : gating signal from the decoder (upsampled to skip's spatial size)
+        skip : encoder skip connection
+        """
+        att = self.relu(self.W_g(g) + self.W_x(skip))
+        att = self.psi(att)
+        return skip * att
+
+
+class UpBlock(nn.Module):
+    """Upsample -> attention-gate skip -> concatenate -> ConvBlock."""
+
+    def __init__(self, in_ch: int, out_ch: int, bilinear: bool = True):
+        super().__init__()
+        # out_ch == skip channels, gate channels == in_ch - out_ch
+        gate_ch = in_ch - out_ch
+        self.attention = AttentionGate(gate_ch, out_ch)
+
+        if bilinear:
+            self.up = nn.Upsample(scale_factor=2, mode="bilinear",
+                                  align_corners=True)
+            self.conv = ConvBlock(in_ch, out_ch)
+        else:
+            self.up = nn.ConvTranspose2d(in_ch // 2, in_ch // 2,
+                                         kernel_size=2, stride=2)
+            self.conv = ConvBlock(in_ch, out_ch)
+
+    def forward(self, x, skip):
+        x = self.up(x)
+        # Pad if sizes don't exactly match
+        dy = skip.size(2) - x.size(2)
+        dx = skip.size(3) - x.size(3)
+        x = F.pad(x, [dx // 2, dx - dx // 2,
+                       dy // 2, dy - dy // 2])
+        skip = self.attention(g=x, skip=skip)
+        x = torch.cat([skip, x], dim=1)
+        return self.conv(x)
+
+
+class ASPP(nn.Module):
+    """Atrous Spatial Pyramid Pooling.
+
+    Applies parallel dilated convolutions at multiple rates plus global
+    average pooling, then fuses the results with a 1x1 projection.
+    Placed at the encoder bottleneck to capture multi-scale context.
+    """
+
+    def __init__(self, in_ch: int, out_ch: int,
+                 rates: tuple = (6, 12, 18)):
+        super().__init__()
+
+        # 1x1 convolution branch
+        self.conv1x1 = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, 1, bias=False),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+        )
+
+        # Dilated convolution branches
+        self.atrous_convs = nn.ModuleList()
+        for rate in rates:
+            self.atrous_convs.append(nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 3, padding=rate,
+                          dilation=rate, bias=False),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+            ))
+
+        # Global average pooling branch (no BN after pooling to 1x1
+        # to avoid BatchNorm errors with single-element spatial dims)
+        self.gap_pool = nn.AdaptiveAvgPool2d(1)
+        self.gap_conv = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, 1, bias=True),
+            nn.ReLU(inplace=True),
+        )
+
+        # Fuse all branches: 1x1 + len(rates) dilated + GAP
+        num_branches = 1 + len(rates) + 1
+        self.project = nn.Sequential(
+            nn.Conv2d(out_ch * num_branches, out_ch, 1, bias=False),
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x):
+        h, w = x.shape[2], x.shape[3]
+
+        branches = [self.conv1x1(x)]
+        for atrous in self.atrous_convs:
+            branches.append(atrous(x))
+        # GAP branch — upsample back to input spatial size
+        gap = self.gap_conv(self.gap_pool(x))
+        gap = F.interpolate(gap, size=(h, w), mode="bilinear",
+                            align_corners=True)
+        branches.append(gap)
+
+        return self.project(torch.cat(branches, dim=1))
+
+
+class UNet(nn.Module):
+    """
+    U-Net for multi-class segmentation. Implements a number of improvements
+    over a standard U-Net, such as ASPP at the bottleneck and deep
+    supervision side outputs.
+    """
+
+    def __init__(self,
+                 in_channels: int = config.IMAGE_CHANNELS,
+                 num_classes: int = config.NUM_CLASSES,
+                 features: list = None,
+                 bilinear: bool = True):
+        super().__init__()
+        if features is None:
+            features = [64, 128, 256, 512, 1024]
+
+        self.inc = ConvBlock(in_channels, features[0])
+
+        # Encoder (downsampling)
+        self.encoders = nn.ModuleList()
+        for i in range(len(features) - 1):
+            self.encoders.append(DownBlock(features[i], features[i + 1]))
+
+        # ASPP at the bottleneck for multi-scale context
+        self.aspp = ASPP(features[-1], features[-1])
+
+        # Decoder (upsampling)
+        self.decoders = nn.ModuleList()
+        for i in range(len(features) - 1, 0, -1):
+            self.decoders.append(
+                UpBlock(features[i] + features[i - 1], features[i - 1],
+                        bilinear=bilinear)
+            )
+
+        self.outc = nn.Conv2d(features[0], num_classes, kernel_size=1)
+
+        # Deep supervision: side-output heads at intermediate decoder stages
+        # (excludes the final decoder stage which feeds into self.outc)
+        self.side_heads = nn.ModuleList()
+        for i in range(len(features) - 1, 1, -1):
+            self.side_heads.append(
+                nn.Conv2d(features[i - 1], num_classes, kernel_size=1)
+            )
+
+    def forward(self, x):
+        target_size = x.shape[2:]
+
+        # Encoder path
+        skips = []
+        x = self.inc(x)
+        skips.append(x)
+
+        for enc in self.encoders:
+            x = enc(x)
+            skips.append(x)
+
+        # Remove bottleneck from skips (it's our starting point for decoder)
+        skips = skips[:-1]
+
+        # Multi-scale context at the bottleneck
+        x = self.aspp(x)
+
+        # Decoder path with deep supervision side outputs
+        side_outputs = []
+        for i, (dec, skip) in enumerate(
+                zip(self.decoders, reversed(skips))):
+            x = dec(x, skip)
+            # Collect side outputs from all but the last decoder stage
+            if i < len(self.side_heads):
+                side_out = self.side_heads[i](x)
+                side_out = F.interpolate(side_out, size=target_size,
+                                         mode="bilinear",
+                                         align_corners=True)
+                side_outputs.append(side_out)
+
+        main_out = self.outc(x)
+
+        if self.training:
+            return main_out, side_outputs
+        return main_out
+
+    def count_parameters(self):
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+
+class AEEncoder(nn.Module):
+    """
+    Encoder half of the autoencoder.
+    Downsamples the image through conv blocks + max-pooling, producing
+    multi-scale feature maps. Skips are returned but not actually used in the decoder.
+    """
+
+    def __init__(self,
+                 in_channels: int = config.IMAGE_CHANNELS,
+                 features: list = None):
+        super().__init__()
+        if features is None:
+            features = [64, 128, 256, 512]
+
+        self.inc = ConvBlock(in_channels, features[0])
+
+        self.encoders = nn.ModuleList()
+        for i in range(len(features) - 1):
+            self.encoders.append(DownBlock(features[i], features[i + 1]))
+
+        self.features = features
+
+    def forward(self, x):
+        """Returns bottleneck and list of skip features (high-res first)."""
+        skips = []
+        x = self.inc(x)
+        skips.append(x)
+
+        for enc in self.encoders:
+            x = enc(x)
+            skips.append(x)
+
+        bottleneck = skips.pop()   # deepest feature map
+        return bottleneck, skips
+
+
+class AEDecoder(nn.Module):
+    """
+    Decoder for image reconstruction (autoencoder pre-training).
+    Mirrors the encoder, using transposed convolutions to upsample.
+    Only used during AE pre-training and is discarded before the ae-seg
+    training (since that uses the frozen encoder weights).
+    """
+
+    def __init__(self,
+                 out_channels: int = config.IMAGE_CHANNELS,
+                 features: list = None):
+        super().__init__()
+        if features is None:
+            features = [64, 128, 256, 512]
+
+        reversed_feats = list(reversed(features))
+
+        self.ups = nn.ModuleList()
+        for i in range(len(reversed_feats) - 1):
+            self.ups.append(nn.Sequential(
+                nn.ConvTranspose2d(reversed_feats[i], reversed_feats[i + 1],
+                                   kernel_size=2, stride=2),
+                ConvBlock(reversed_feats[i + 1], reversed_feats[i + 1]),
+            ))
+
+        self.final = nn.Sequential(
+            nn.Conv2d(reversed_feats[-1], out_channels, kernel_size=1),
+            nn.Sigmoid(),  # pixel values in [0, 1]
+        )
+
+    def forward(self, x):
+        for up in self.ups:
+            x = up(x)
+        return self.final(x)
+
+
+class Autoencoder(nn.Module):
+    """
+    Full autoencoder: encoder + reconstruction decoder.
+    Trained to minimise reconstruction loss (MSE) on raw images.
+    """
+
+    def __init__(self,
+                 in_channels: int = config.IMAGE_CHANNELS,
+                 features: list = None):
+        super().__init__()
+        if features is None:
+            features = [64, 128, 256, 512]
+        self.encoder = AEEncoder(in_channels, features)
+        self.decoder = AEDecoder(in_channels, features)
+
+    def forward(self, x):
+        bottleneck, _skips = self.encoder(x)
+        reconstruction = self.decoder(bottleneck)
+        return reconstruction
+
+    def count_parameters(self):
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+
+class SegDecoder(nn.Module):
+    """
+    Segmentation decoder for the frozen-encoder AE-Seg pipeline.
+
+    Mirrors the UNet decoder structure (upsample → residual ConvBlock at
+    each stage, deep supervision side outputs) but without skip
+    connections or attention gates. This forces all spatial information
+    through the bottleneck, giving a fair test of pre-training quality.
+    """
+
+    def __init__(self,
+                 num_classes: int = config.NUM_CLASSES,
+                 features: list = None,
+                 target_size: tuple = None):
+        super().__init__()
+        if features is None:
+            features = [64, 128, 256, 512]
+
+        self.target_size = target_size  # (H, W) of the input image
+
+        # Decoder mirrors encoder in reverse: upsample → ConvBlock
+        self.ups = nn.ModuleList()
+        for i in range(len(features) - 1, 0, -1):
+            self.ups.append(nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear",
+                            align_corners=True),
+                ConvBlock(features[i], features[i - 1]),
+            ))
+
+        self.outc = nn.Conv2d(features[0], num_classes, kernel_size=1)
+
+        # Deep supervision side-output heads (all but last decoder stage)
+        self.side_heads = nn.ModuleList()
+        for i in range(len(features) - 1, 1, -1):
+            self.side_heads.append(
+                nn.Conv2d(features[i - 1], num_classes, kernel_size=1)
+            )
+
+    def forward(self, bottleneck, target_size=None):
+        """
+        Parameters
+        ----------
+        bottleneck  : tensor from deepest encoder stage
+        target_size : (H, W) for side-output upsampling; inferred from
+                      bottleneck and number of stages if not provided
+
+        Returns
+        -------
+        During training : (main_logits, [side_logits_1, ...])
+        During eval     : main_logits
+        """
+        ts = target_size or self.target_size
+        x = bottleneck
+
+        side_outputs = []
+        for i, up in enumerate(self.ups):
+            x = up(x)
+            if i < len(self.side_heads):
+                side_out = self.side_heads[i](x)
+                if ts is not None:
+                    side_out = F.interpolate(side_out, size=ts,
+                                             mode="bilinear",
+                                             align_corners=True)
+                side_outputs.append(side_out)
+
+        main_out = self.outc(x)
+
+        if self.training:
+            return main_out, side_outputs
+        return main_out
+
+
+class AESegmentationModel(nn.Module):
+    """
+    Combines a frozen AEEncoder with a trainable SegDecoder.
+
+    The decoder does not use skip connections or attention gates,
+    so all spatial information must pass through the bottleneck.
+    This gives a fair evaluation of the pre-trained representation.
+
+    Usage
+    -----
+    1. Train an Autoencoder (see train_autoencoder.py).
+    2. Load the trained encoder weights into this model.
+    3. Freeze the encoder and train only the segmentation decoder.
+    """
+
+    def __init__(self,
+                 encoder: AEEncoder,
+                 num_classes: int = config.NUM_CLASSES,
+                 features: list = None,
+                 freeze_encoder: bool = True):
+        super().__init__()
+        self.encoder = encoder
+
+        if freeze_encoder:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+
+        if features is None:
+            features = encoder.features
+
+        # ASPP at the bottleneck for multi-scale context (trainable)
+        self.aspp = ASPP(features[-1], features[-1])
+        self.seg_decoder = SegDecoder(num_classes, features)
+
+    def forward(self, x):
+        target_size = x.shape[2:]
+        bottleneck, _skips = self.encoder(x)
+        bottleneck = self.aspp(bottleneck)
+        result = self.seg_decoder(bottleneck, target_size=target_size)
+        return result
+
+    def count_parameters(self, trainable_only: bool = True):
+        if trainable_only:
+            return sum(p.numel() for p in self.parameters()
+                       if p.requires_grad)
+        return sum(p.numel() for p in self.parameters())
+
+
+if __name__ == "__main__":
+    device = "cpu"
+    x = torch.randn(2, 3, 256, 256, device=device)
+
+    # UNet
+    unet = UNet().to(device)
+    out = unet(x)
+    print(f"UNet  input: {x.shape}  ->  output: {out.shape}")
+    print(f"UNet  trainable params: {unet.count_parameters():,}")
+
+    # Autoencoder
+    ae = Autoencoder().to(device)
+    recon = ae(x)
+    print(f"\nAutoencoder  input: {x.shape}  ->  reconstruction: {recon.shape}")
+    print(f"Autoencoder  trainable params: {ae.count_parameters():,}")
+
+    # AE-based segmentation
+    ae_seg = AESegmentationModel(ae.encoder, freeze_encoder=True).to(device)
+    seg = ae_seg(x)
+    print(f"\nAE-Seg  input: {x.shape}  ->  output: {seg.shape}")
+    print(f"AE-Seg  trainable params (decoder only): "
+          f"{ae_seg.count_parameters(True):,}")
+    print(f"AE-Seg  total params: "
+          f"{ae_seg.count_parameters(False):,}")
