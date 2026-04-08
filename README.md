@@ -33,7 +33,7 @@ python -m task1.evaluate --unet_ckpt src/task1/checkpoints/unet_final.pth --ae_s
 
 For Task 2 (nuclei classification) setup, training scripts, evaluation, and model weights, see the dedicated readme:
 
-👉 [Task2/Readme.md](Task2/Readme.md)
+[Task2/Readme.md](Task2/Readme.md)
 
 Quick start:
 ```bash
