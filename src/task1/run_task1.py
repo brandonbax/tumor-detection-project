@@ -28,7 +28,7 @@ def main():
     p.add_argument("--ae_batch_size", type=int, default=config.AE_BATCH_SIZE)
     p.add_argument("--ae_seg_batch_size", type=int, default=config.AE_SEG_BATCH_SIZE)
     p.add_argument("--use_class_weights", action="store_true",
-                    help="Use inverse‑frequency class weights for CE loss")
+                    help="Use inverse-frequency class weights for CE loss")
     p.add_argument("--dampen_weights", action="store_true",
                     help="Use sqrt-dampened weights for softer rebalancing")
     p.add_argument("--lambda_dice", type=float, default=config.LAMBDA_DICE)
